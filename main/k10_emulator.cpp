@@ -81,6 +81,9 @@ int16_t clamp_pcm16(int sample) {
 }
 
 void render_line(short strip_row) {
+    // Clear the entire 16-row strip first.
+    memset(frame_buffer, 0, kFrameBytes);
+
     // Render two 8-pixel high tile rows into the 16-pixel strip
     unsigned short* original_buffer = frame_buffer;
 
