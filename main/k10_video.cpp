@@ -7,7 +7,12 @@
 #include "driver/spi_master.h"
 
 #include "arcade_core/config.h"
+#include "arcade_core/pacman_logo.h"
 #include "arcade_core/galaga_logo.h"
+#include "arcade_core/dkong_logo.h"
+#include "arcade_core/frogger_logo.h"
+#include "arcade_core/digdug_logo.h"
+#include "arcade_core/1942_logo.h"
 
 #include "k10_config.h"
 #include "k10_hardware.h"
@@ -51,22 +56,22 @@ struct MenuEntry {
 
 const MenuEntry g_menu_entries[] = {
 #ifdef ENABLE_PACMAN
-    {K10_MACHINE_PACMAN, "Pac-Man", nullptr, 0x07e0},
+    {K10_MACHINE_PACMAN, "Pac-Man", pacman_logo, 0x07e0},
 #endif
 #ifdef ENABLE_GALAGA
     {K10_MACHINE_GALAGA, "Galaga", galaga_logo, 0xf800},
 #endif
 #ifdef ENABLE_DKONG
-    {K10_MACHINE_DKONG, "Donkey Kong", nullptr, 0xfd20},
+    {K10_MACHINE_DKONG, "Donkey Kong", dkong_logo, 0xfd20},
 #endif
 #ifdef ENABLE_FROGGER
-    {K10_MACHINE_FROGGER, "Frogger", nullptr, 0x07ff},
+    {K10_MACHINE_FROGGER, "Frogger", frogger_logo, 0x07ff},
 #endif
 #ifdef ENABLE_DIGDUG
-    {K10_MACHINE_DIGDUG, "Dig Dug", nullptr, 0xf81f},
+    {K10_MACHINE_DIGDUG, "Dig Dug", digdug_logo, 0xf81f},
 #endif
 #ifdef ENABLE_1942
-    {K10_MACHINE_1942, "1942", nullptr, 0xffe0},
+    {K10_MACHINE_1942, "1942", _1942_logo, 0xffe0},
 #endif
 };
 

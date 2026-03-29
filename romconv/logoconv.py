@@ -22,7 +22,7 @@ def parse_logo(inname, outname):
     # get colorset
     for row in img:
         for pix in row:
-            r,g,b = 31*pix[0]//255, 63*pix[1]//255, 31*pix[2]//255
+            r,g,b = int(31)*int(pix[0])//255, int(63)*int(pix[1])//255, int(31)*int(pix[2])//255
             rgb = (r << 11) + (g << 5) + b
             rgbs = ((rgb & 0xff00) >> 8) + ((rgb & 0xff) << 8)
             colset.add(rgbs)
@@ -34,7 +34,7 @@ def parse_logo(inname, outname):
     rgb565 = []
     for row in img:
         for pix in row:
-            r,g,b = 31*pix[0]//255, 63*pix[1]//255, 31*pix[2]//255
+            r,g,b = int(31)*int(pix[0])//255, int(63)*int(pix[1])//255, int(31)*int(pix[2])//255
             rgb = (r << 11) + (g << 5) + b
             rgbs = ((rgb & 0xff00) >> 8) + ((rgb & 0xff) << 8)
             rgb565.append(rgbs)
