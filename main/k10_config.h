@@ -73,7 +73,7 @@
 #define K10_DISABLE_ONBOARD_BUTTONS 1
 
 // System-wide defaults
-#define K10_AUDIO_VOLUME 10     // 0 (mute) to 100 (full)
+#define K10_AUDIO_VOLUME 30     // 0 (mute) to 100 (full)
 #define K10_LED_BRIGHTNESS 50   // 0 to 100
 #define K10_AUDIO_BUFFER_FRAMES 64 // Samples per synthesis/DMA chunk
 #define K10_AUDIO_BUFFER_BYTES (K10_AUDIO_BUFFER_FRAMES * 2 * sizeof(int16_t)) // Stereo 16-bit
