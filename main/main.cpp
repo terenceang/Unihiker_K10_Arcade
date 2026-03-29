@@ -2,10 +2,14 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "esp_log.h"
+
+static const char *TAG = "K10_MAIN";
 
 #include "k10_state.h"
 #include "k10_emulator.h"
 #include "k10_hardware.h"
+#include "k10_bt.h"
 #include "k10_idf.h"
 #include "k10_input.h"
 #include "k10_video.h"
@@ -36,6 +40,7 @@ static void k10_main_task(void* parameter) {
     printf("This project is the pure ESP-IDF arcade target.\n");
 
     k10_hw_init();
+    k10_bt_begin();
 
     if (k10_state_boot()) {
         if (k10_state_single_game_mode()) {
@@ -49,7 +54,38 @@ static void k10_main_task(void* parameter) {
     }
 
     while (true) {
-        const uint8_t input_state = k10_read_inputs();
+        uint8_t input_state = k10_read_inputs();
+
+        // Integrate BLE Gamepad State
+        k10_gamepad_state_t bt_state;
+        k10_bt_get_gamepad_state(&bt_state);
+
+        // BLE status — printed once per second
+        static uint32_t last_bt_log_ms = 0;
+        uint32_t now_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+        if (now_ms - last_bt_log_ms >= 1000) {
+            last_bt_log_ms = now_ms;
+            if (bt_state.connected) {
+                ESP_LOGI(TAG, "[BT] Connected  | Btns:%04x Hat:%d LX:%4d LY:%4d RX:%4d RY:%4d",
+                         bt_state.buttons, bt_state.hat,
+                         bt_state.lx, bt_state.ly, bt_state.rx, bt_state.ry);
+            } else {
+                ESP_LOGI(TAG, "[BT] Scanning...");
+            }
+        }
+
+        if (bt_state.connected) {
+            // Map LX/LY to Directions
+            if (bt_state.lx < -40) input_state |= K10_BUTTON_LEFT;
+            if (bt_state.lx > 40)  input_state |= K10_BUTTON_RIGHT;
+            if (bt_state.ly < -40) input_state |= K10_BUTTON_UP;
+            if (bt_state.ly > 40)  input_state |= K10_BUTTON_DOWN;
+
+            // Map Buttons (Generic HID Gamepad bits often: 0=A, 1=B, 2=X, 3=Y)
+            if (bt_state.buttons & 0x01) input_state |= K10_BUTTON_FIRE; // A -> Fire
+            if (bt_state.buttons & 0x02) input_state |= K10_BUTTON_COIN; // B -> Coin
+            if (bt_state.buttons & 0x08) input_state |= K10_BUTTON_START; // Y/X? -> Start (simplified)
+        }
 
         switch (k10_state_handle_input(input_state, last_input_state)) {
             case K10_STATE_EVENT_MENU_CHANGED:

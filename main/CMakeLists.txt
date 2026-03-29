@@ -4,7 +4,8 @@ set(srcs
         "k10_emulator.cpp"
         "k10_emulator_core.c"
         "k10_hardware.cpp"
-        "k10_video.cpp")
+        "k10_video.cpp"
+        "k10_bt.cpp")
 
 set(requires "")
 

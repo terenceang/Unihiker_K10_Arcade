@@ -520,6 +520,10 @@ uint16_t* k10_video_get_draw_buffer() {
     return g_frame_buffers[g_buffer_index];
 }
 
+int k10_video_menu_count() {
+    return static_cast<int>(kMenuEntryCount);
+}
+
 int k10_video_wrap_menu_selection(int selection_index, int delta) {
     if (kMenuEntryCount == 0) return 0;
     const int count = static_cast<int>(kMenuEntryCount);

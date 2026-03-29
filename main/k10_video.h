@@ -17,6 +17,7 @@ uint16_t* k10_video_get_draw_buffer();
 void k10_video_draw_menu_frame(int selection);
 void k10_video_draw_machine_frame(int machine);
 int k10_video_wrap_menu_selection(int selection_index, int delta);
+int k10_video_menu_count();
 const char* k10_video_menu_name(int selection_index);
 K10Machine k10_video_menu_machine(int selection_index);
 
