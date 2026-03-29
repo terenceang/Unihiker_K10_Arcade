@@ -7,10 +7,8 @@
 #include "galaga_rom3.h"
 
 static inline unsigned char galaga_RdZ80(unsigned short Addr) {
-  static const unsigned char *rom[] = { galaga_rom_cpu1, galaga_rom_cpu2, galaga_rom_cpu3 };
-  
   if(Addr < 16384)
-    return rom[current_cpu][Addr];
+    return current_rom_base[Addr];
   
   /* video/sprite ram */
   if((Addr & 0xe000) == 0x8000)
@@ -174,13 +172,14 @@ static inline void galaga_WrZ80(unsigned short Addr, unsigned char Value) {
 }
 
 static inline void galaga_run_frame(void) {
+  static const unsigned char *roms[] = { galaga_rom_cpu1, galaga_rom_cpu2, galaga_rom_cpu3 };
   for(int i=0;i<INST_PER_FRAME;i++) {
-    current_cpu = 0;
+    current_cpu = 0; current_rom_base = roms[0];
     StepZ80(cpu); StepZ80(cpu); StepZ80(cpu); StepZ80(cpu);
     if(!sub_cpu_reset) {
-      current_cpu = 1;
+      current_cpu = 1; current_rom_base = roms[1];
       StepZ80(cpu+1); StepZ80(cpu+1); StepZ80(cpu+1); StepZ80(cpu+1);       
-      current_cpu = 2;
+      current_cpu = 2; current_rom_base = roms[2];
       StepZ80(cpu+2); StepZ80(cpu+2); StepZ80(cpu+2); StepZ80(cpu+2);       
     }
 
@@ -327,11 +326,16 @@ static inline void galaga_blit_tile(short row, char col) {
   // 8 pixel rows per tile
   for(char r=0;r<8;r++,ptr+=(224-8)) {
     unsigned short pix = *tile++;
-    // 8 pixel columns per tile
-    for(char c=0;c<8;c++,pix>>=2) {
-      if(pix & 3) *ptr = colors[pix&3];
-      ptr++;
-    }
+    // 8 pixel columns per tile - unrolled
+    if (pix & 3) ptr[0] = colors[pix & 3]; pix >>= 2;
+    if (pix & 3) ptr[1] = colors[pix & 3]; pix >>= 2;
+    if (pix & 3) ptr[2] = colors[pix & 3]; pix >>= 2;
+    if (pix & 3) ptr[3] = colors[pix & 3]; pix >>= 2;
+    if (pix & 3) ptr[4] = colors[pix & 3]; pix >>= 2;
+    if (pix & 3) ptr[5] = colors[pix & 3]; pix >>= 2;
+    if (pix & 3) ptr[6] = colors[pix & 3]; pix >>= 2;
+    if (pix & 3) ptr[7] = colors[pix & 3];
+    ptr += 8;
   }
 }
 

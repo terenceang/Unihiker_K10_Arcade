@@ -172,6 +172,7 @@ void prepare_emulation(void);
 void emulate_frame(void);
 extern unsigned char *memory;
 extern char game_started;
+extern const unsigned char *current_rom_base;
 #ifdef ENABLE_GALAGA
 extern unsigned char starcontrol;
 #endif
@@ -244,45 +245,11 @@ static inline byte OpZ80_INL(register word Addr) {
 #ifdef ENABLE_1942
   static const unsigned char *_1942_bank_table[] = {
     _1942_rom_cpu1_b0, _1942_rom_cpu1_b1, _1942_rom_cpu1_b2 }; 
-#endif
-
-#ifndef SINGLE_MACHINE
-  static const unsigned char *rom_table[][3] = {
-    { NONE, NONE, NONE },
-#define ROM_ENDL ,
-#else
-  static const unsigned char *rom_table[3] =
-#define ROM_ENDL ;
-#endif
-#ifdef ENABLE_PACMAN 
-    { pacman_rom, NONE, NONE } ROM_ENDL
-#endif
-#ifdef ENABLE_GALAGA
-    { galaga_rom_cpu1, galaga_rom_cpu2, galaga_rom_cpu3 } ROM_ENDL
-#endif
-#ifdef ENABLE_DKONG
-    { dkong_rom_cpu1, NONE, NONE } ROM_ENDL
-#endif
-#ifdef ENABLE_FROGGER
-    { frogger_rom_cpu1, frogger_rom_cpu2, NONE } ROM_ENDL
-#endif
-#ifdef ENABLE_DIGDUG
-    { digdug_rom_cpu1, digdug_rom_cpu2, digdug_rom_cpu3 } ROM_ENDL
-#endif  
-#ifdef ENABLE_1942
-    { _1942_rom_cpu1, _1942_rom_cpu2, NONE } ROM_ENDL
-#endif  
-#ifndef SINGLE_MACHINE
-  }; 
-#ifdef ENABLE_1942
-  if(machine == MCH_1942 && (Addr & 0x8000))
+  if(MACHINE_IS_1942 && (Addr & 0x8000))
     return _1942_bank_table[_1942_bank][Addr-0x8000];
 #endif
   
-  return rom_table[machine][current_cpu][Addr];
-#else 
-  return rom_table[current_cpu][Addr];
-#endif
+  return current_rom_base[Addr];
 }
 
 #endif // _EMULATION_H_

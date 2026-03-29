@@ -287,7 +287,27 @@ extern "C" unsigned short LoopZ80(Z80* cpu_state) {
 }
 
 bool k10_emulator_supports_machine(K10Machine machine) {
-    return machine == K10_MACHINE_GALAGA;
+    switch (machine) {
+#ifdef ENABLE_PACMAN
+        case K10_MACHINE_PACMAN: return true;
+#endif
+#ifdef ENABLE_GALAGA
+        case K10_MACHINE_GALAGA: return true;
+#endif
+#ifdef ENABLE_DKONG
+        case K10_MACHINE_DKONG: return true;
+#endif
+#ifdef ENABLE_FROGGER
+        case K10_MACHINE_FROGGER: return true;
+#endif
+#ifdef ENABLE_DIGDUG
+        case K10_MACHINE_DIGDUG: return true;
+#endif
+#ifdef ENABLE_1942
+        case K10_MACHINE_1942: return true;
+#endif
+        default: return false;
+    }
 }
 
 bool k10_emulator_start(K10Machine machine) {

@@ -14,9 +14,11 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <esp_heap_caps.h>
 #include <esp_timer.h>
 
 #include "k10_idf.h"
+#include "k10_hardware.h"
 
 #include "Z80.h"
 #include "config.h"
@@ -37,10 +39,11 @@ static inline unsigned long micros_now(void) {
   return (unsigned long)esp_timer_get_time();
 }
 
-unsigned char *memory;
+unsigned char *memory = NULL;
 
 char game_started = 0;
 char current_cpu = 0;
+const unsigned char *current_rom_base = NULL;
 char irq_enable[3] = { 0,0,0 };
 
 #if defined(ENABLE_GALAGA) || defined(ENABLE_DIGDUG) || defined(ENABLE_1942)
@@ -563,8 +566,10 @@ unsigned char i8048_xdm_read(struct i8048_state_S *state, unsigned char addr) {
 #endif
 
 void prepare_emulation(void) {
-  memory = malloc(RAMSIZE);
-  memset(memory, 0, RAMSIZE);
+  memory = (unsigned char *)heap_caps_malloc(RAMSIZE, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+  if (memory) {
+    memset(memory, 0, RAMSIZE);
+  }
 
 #if defined(MASTER_ATTRACT_MENU_TIMEOUT) && !defined(SINGLE_MACHINE)
   master_attract_timeout = k10_millis();
@@ -573,6 +578,9 @@ void prepare_emulation(void) {
   // reset all three z80's although we might not use them all
   for(current_cpu=0;current_cpu<3;current_cpu++)
     ResetZ80(&cpu[current_cpu]);
+
+  current_cpu = 0;
+  current_rom_base = NULL;
 
 #ifdef ENABLE_DKONG
   i8048_reset(&cpu_8048);
