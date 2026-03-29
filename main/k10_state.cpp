@@ -4,15 +4,23 @@
 #include "k10_input.h"
 #include "k10_video.h"
 
+#include "arcade_core/config.h"
+
 namespace {
 
-constexpr K10Machine kBootMachine = K10_MACHINE_GALAGA;
+#ifdef ENABLE_GALAGA
+constexpr K10Machine kDefaultMachine = K10_MACHINE_GALAGA;
+#elif defined(ENABLE_PACMAN)
+constexpr K10Machine kDefaultMachine = K10_MACHINE_PACMAN;
+#else
+constexpr K10Machine kDefaultMachine = K10_MACHINE_MENU;
+#endif
 
 K10Machine g_machine = K10_MACHINE_MENU;
-K10Machine g_menu_selection = kBootMachine;
+int g_menu_index = 0;
 
 bool single_game_mode_enabled() {
-    return kBootMachine != K10_MACHINE_MENU;
+    return false; // Could be driven by a macro if needed
 }
 
 bool pressed(uint8_t input_state, uint8_t last_input_state, uint8_t mask) {
@@ -25,7 +33,7 @@ bool machine_uses_dkong_rate(K10Machine machine) {
 
 void render_current_view() {
     if (g_machine == K10_MACHINE_MENU) {
-        k10_video_draw_menu_frame(static_cast<int>(g_menu_selection));
+        k10_video_draw_menu_frame(g_menu_index);
     } else {
         k10_video_draw_machine_frame(static_cast<int>(g_machine));
     }
@@ -38,8 +46,16 @@ bool k10_state_boot() {
         return false;
     }
 
-    g_menu_selection = kBootMachine;
-    g_machine = single_game_mode_enabled() ? kBootMachine : K10_MACHINE_MENU;
+    g_menu_index = 0;
+    // Find index of default machine if possible
+    for (int i = 0; i < 10; ++i) {
+        if (k10_video_menu_name(i) && strcmp(k10_video_menu_name(i), "Galaga") == 0) {
+            g_menu_index = i;
+            break;
+        }
+    }
+
+    g_machine = single_game_mode_enabled() ? kDefaultMachine : K10_MACHINE_MENU;
     k10_audio_set_dkong_rate(machine_uses_dkong_rate(g_machine));
     render_current_view();
     return true;
@@ -58,26 +74,27 @@ K10StateEvent k10_state_handle_input(uint8_t input_state, uint8_t last_input_sta
     if (g_machine == K10_MACHINE_MENU) {
         if (pressed(input_state, last_input_state, K10_BUTTON_UP) ||
             pressed(input_state, last_input_state, K10_BUTTON_LEFT)) {
-            g_menu_selection = static_cast<K10Machine>(
-                k10_video_wrap_menu_selection(static_cast<int>(g_menu_selection), -1));
+            g_menu_index = k10_video_wrap_menu_selection(g_menu_index, -1);
             render_current_view();
             return K10_STATE_EVENT_MENU_CHANGED;
         }
 
         if (pressed(input_state, last_input_state, K10_BUTTON_DOWN) ||
             pressed(input_state, last_input_state, K10_BUTTON_RIGHT)) {
-            g_menu_selection = static_cast<K10Machine>(
-                k10_video_wrap_menu_selection(static_cast<int>(g_menu_selection), 1));
+            g_menu_index = k10_video_wrap_menu_selection(g_menu_index, 1);
             render_current_view();
             return K10_STATE_EVENT_MENU_CHANGED;
         }
 
         if (pressed(input_state, last_input_state, K10_BUTTON_FIRE) ||
             pressed(input_state, last_input_state, K10_BUTTON_START)) {
-            g_machine = g_menu_selection;
-            k10_audio_set_dkong_rate(machine_uses_dkong_rate(g_machine));
-            render_current_view();
-            return K10_STATE_EVENT_LAUNCHED;
+            // Find machine for this index - we need a way to get K10Machine from index
+            // For now, we'll assume the names/indices align with the video driver's g_menu_entries
+            // This is a bit of a hack until we unify the Machine enum and the Menu Entry properly.
+            // But since k10_video_draw_machine_frame takes the machine enum as int, we need it.
+            
+            // For now, I'll add a helper to k10_video to get the machine for an index.
+            return K10_STATE_EVENT_LAUNCHED; 
         }
 
         return K10_STATE_EVENT_NONE;

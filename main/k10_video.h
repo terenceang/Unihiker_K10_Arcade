@@ -15,7 +15,8 @@ uint16_t* k10_video_get_draw_buffer();
 // Menu and UI rendering.
 void k10_video_draw_menu_frame(int selection);
 void k10_video_draw_machine_frame(int machine);
-int k10_video_wrap_menu_selection(int selection, int delta);
-const char* k10_video_menu_name(int selection);
+int k10_video_wrap_menu_selection(int selection_index, int delta);
+const char* k10_video_menu_name(int selection_index);
+K10Machine k10_video_menu_machine(int selection_index);
 
 #endif

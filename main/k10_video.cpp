@@ -42,20 +42,54 @@ void write_gpio(int pin, uint32_t level) {
 }
 
 struct MenuEntry {
+    K10Machine machine;
     const char* name;
     const uint16_t* logo;
+    uint16_t accent;
 };
 
-MenuEntry g_menu_entries[] = {
-    {"Pac-Man", nullptr},
-    {"Galaga", galaga_logo},
-    {"Donkey Kong", nullptr},
-    {"Frogger", nullptr},
-    {"Dig Dug", nullptr},
-    {"1942", nullptr},
+const MenuEntry g_menu_entries[] = {
+#ifdef ENABLE_PACMAN
+    {K10_MACHINE_PACMAN, "Pac-Man", nullptr, 0x07e0},
+#endif
+#ifdef ENABLE_GALAGA
+    {K10_MACHINE_GALAGA, "Galaga", galaga_logo, 0xf800},
+#endif
+#ifdef ENABLE_DKONG
+    {K10_MACHINE_DKONG, "Donkey Kong", nullptr, 0xfd20},
+#endif
+#ifdef ENABLE_FROGGER
+    {K10_MACHINE_FROGGER, "Frogger", nullptr, 0x07ff},
+#endif
+#ifdef ENABLE_DIGDUG
+    {K10_MACHINE_DIGDUG, "Dig Dug", nullptr, 0xf81f},
+#endif
+#ifdef ENABLE_1942
+    {K10_MACHINE_1942, "1942", nullptr, 0xffe0},
+#endif
 };
 
 constexpr size_t kMenuEntryCount = sizeof(g_menu_entries) / sizeof(g_menu_entries[0]);
+
+int normalize_selection(int selection_index) {
+    if (selection_index < 0 || selection_index >= static_cast<int>(kMenuEntryCount)) {
+        return 0;
+    }
+    return selection_index;
+}
+
+const MenuEntry& menu_entry_at(int index) {
+    return g_menu_entries[normalize_selection(index)];
+}
+
+const MenuEntry* menu_entry_for_machine(int machine) {
+    for (size_t i = 0; i < kMenuEntryCount; ++i) {
+        if (g_menu_entries[i].machine == static_cast<K10Machine>(machine)) {
+            return &g_menu_entries[i];
+        }
+    }
+    return nullptr;
+}
 
 spi_device_interface_config_t g_if_cfg = {
     .command_bits = 0,
@@ -218,34 +252,6 @@ uint16_t greyscale(uint16_t input) {
                                  ((average << 2) & 0x00f8) | ((average >> 3) & 0x0007));
 }
 
-int normalize_selection(int selection) {
-    if (selection < 1 || selection > static_cast<int>(kMenuEntryCount)) {
-        return 1;
-    }
-    return selection;
-}
-
-const MenuEntry& menu_entry_for(int selection) {
-    return g_menu_entries[normalize_selection(selection) - 1];
-}
-
-uint16_t machine_accent_color(int machine) {
-    switch (normalize_selection(machine)) {
-        case 1:
-            return 0x07e0;
-        case 2:
-            return 0xf800;
-        case 3:
-            return 0xfd20;
-        case 4:
-            return 0x07ff;
-        case 5:
-            return 0xf81f;
-        default:
-            return 0xffe0;
-    }
-}
-
 void render_logo(int16_t row, const uint16_t* logo, bool active, uint16_t* buffer) {
     const uint16_t marker = logo[0];
     const uint16_t* data = logo + 1;
@@ -302,10 +308,10 @@ void fill_row(uint16_t* buffer, uint16_t color) {
     }
 }
 
-void render_menu_row(uint16_t* buffer, uint16_t tile_row, int selection) {
+void render_menu_row(uint16_t* buffer, uint16_t tile_row, int selection_index) {
     memset(buffer, 0, K10_TFT_ACTIVE_WIDTH * 8 * sizeof(uint16_t));
 
-    const int normalized_selection = normalize_selection(selection);
+    const int normalized_selection = normalize_selection(selection_index);
     const int offset = 96 * ((normalized_selection + static_cast<int>(kMenuEntryCount) - 2) % static_cast<int>(kMenuEntryCount));
     int logo_index = ((static_cast<int>(tile_row) + offset / 8) / 12) % static_cast<int>(kMenuEntryCount);
     if (logo_index < 0) {
@@ -315,7 +321,7 @@ void render_menu_row(uint16_t* buffer, uint16_t tile_row, int selection) {
     int logo_y = (static_cast<int>(tile_row) * 8 + offset) % 96;
     if (g_menu_entries[logo_index].logo != nullptr) {
         render_logo(static_cast<int16_t>(logo_y), g_menu_entries[logo_index].logo,
-                    normalized_selection == logo_index + 1, buffer);
+                    normalized_selection == logo_index, buffer);
     }
 
     if (logo_y > (96 - 8)) {
@@ -323,7 +329,7 @@ void render_menu_row(uint16_t* buffer, uint16_t tile_row, int selection) {
         logo_y -= 96;
         if (g_menu_entries[logo_index].logo != nullptr) {
             render_logo(static_cast<int16_t>(logo_y), g_menu_entries[logo_index].logo,
-                        normalized_selection == logo_index + 1, buffer);
+                        normalized_selection == logo_index, buffer);
         }
     }
 }
@@ -331,7 +337,9 @@ void render_menu_row(uint16_t* buffer, uint16_t tile_row, int selection) {
 void render_machine_row(uint16_t* buffer, uint16_t tile_row, int machine) {
     memset(buffer, 0, K10_TFT_ACTIVE_WIDTH * 8 * sizeof(uint16_t));
 
-    const uint16_t accent = machine_accent_color(machine);
+    const MenuEntry* entry = menu_entry_for_machine(machine);
+    const uint16_t accent = entry ? entry->accent : 0xffff;
+    
     if (tile_row < 2 || tile_row >= (K10_TFT_ACTIVE_HEIGHT / 8) - 2) {
         fill_row(buffer, accent);
         return;
@@ -349,7 +357,7 @@ void render_machine_row(uint16_t* buffer, uint16_t tile_row, int machine) {
     }
 
     const int16_t logo_row = static_cast<int16_t>(tile_row * 8) - kLogoTop;
-    const uint16_t* logo = menu_entry_for(machine).logo;
+    const uint16_t* logo = entry ? entry->logo : nullptr;
     if (logo != nullptr && logo_row > -8 && logo_row < 96) {
         render_logo(logo_row, logo, true, buffer);
     }
@@ -455,7 +463,7 @@ void k10_video_end_frame() {
     write_gpio(K10_TFT_CS, 1);
 }
 
-void k10_video_draw_menu_frame(int selection) {
+void k10_video_draw_menu_frame(int selection_index) {
     if (!g_video_ready && !k10_video_begin()) {
         return;
     }
@@ -467,7 +475,7 @@ void k10_video_draw_menu_frame(int selection) {
         
         // Render rows into the strip
         for (int i = 0; i < (K10_TFT_STRIP_HEIGHT / 8); ++i) {
-            render_menu_row(buffer + K10_TFT_ACTIVE_WIDTH * 8 * i, strip_row * (K10_TFT_STRIP_HEIGHT / 8) + i, selection);
+            render_menu_row(buffer + K10_TFT_ACTIVE_WIDTH * 8 * i, strip_row * (K10_TFT_STRIP_HEIGHT / 8) + i, selection_index);
         }
         
         k10_video_write(buffer, K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT);
@@ -506,18 +514,20 @@ uint16_t* k10_video_get_draw_buffer() {
     return g_frame_buffers[g_buffer_index];
 }
 
-int k10_video_wrap_menu_selection(int selection, int delta) {
+int k10_video_wrap_menu_selection(int selection_index, int delta) {
+    if (kMenuEntryCount == 0) return 0;
     const int count = static_cast<int>(kMenuEntryCount);
-    int wrapped = normalize_selection(selection) + delta;
-    while (wrapped < 1) {
+    int wrapped = selection_index + delta;
+    while (wrapped < 0) {
         wrapped += count;
     }
-    while (wrapped > count) {
+    while (wrapped >= count) {
         wrapped -= count;
     }
     return wrapped;
 }
 
-const char* k10_video_menu_name(int selection) {
-    return menu_entry_for(selection).name;
+const char* k10_video_menu_name(int selection_index) {
+    if (kMenuEntryCount == 0) return "Empty";
+    return menu_entry_at(selection_index).name;
 }
