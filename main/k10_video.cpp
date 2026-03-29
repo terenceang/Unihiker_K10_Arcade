@@ -6,6 +6,7 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 
+#include "arcade_core/config.h"
 #include "arcade_core/galaga_logo.h"
 
 #include "k10_config.h"
@@ -530,4 +531,9 @@ int k10_video_wrap_menu_selection(int selection_index, int delta) {
 const char* k10_video_menu_name(int selection_index) {
     if (kMenuEntryCount == 0) return "Empty";
     return menu_entry_at(selection_index).name;
+}
+
+K10Machine k10_video_menu_machine(int selection_index) {
+    if (kMenuEntryCount == 0) return K10_MACHINE_MENU;
+    return menu_entry_at(selection_index).machine;
 }

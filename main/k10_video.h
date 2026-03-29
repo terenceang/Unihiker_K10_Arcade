@@ -2,6 +2,7 @@
 #define K10_VIDEO_H
 
 #include <stdint.h>
+#include "k10_state.h"
 
 bool k10_video_begin();
 void k10_video_begin_frame();

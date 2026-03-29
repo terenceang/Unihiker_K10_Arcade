@@ -1,5 +1,7 @@
 #include "k10_state.h"
 
+#include <string.h>
+
 #include "k10_hardware.h"
 #include "k10_input.h"
 #include "k10_video.h"
@@ -88,19 +90,16 @@ K10StateEvent k10_state_handle_input(uint8_t input_state, uint8_t last_input_sta
 
         if (pressed(input_state, last_input_state, K10_BUTTON_FIRE) ||
             pressed(input_state, last_input_state, K10_BUTTON_START)) {
-            // Find machine for this index - we need a way to get K10Machine from index
-            // For now, we'll assume the names/indices align with the video driver's g_menu_entries
-            // This is a bit of a hack until we unify the Machine enum and the Menu Entry properly.
-            // But since k10_video_draw_machine_frame takes the machine enum as int, we need it.
-            
-            // For now, I'll add a helper to k10_video to get the machine for an index.
+            g_machine = k10_video_menu_machine(g_menu_index);
+            k10_audio_set_dkong_rate(machine_uses_dkong_rate(g_machine));
+            render_current_view();
             return K10_STATE_EVENT_LAUNCHED; 
         }
 
         return K10_STATE_EVENT_NONE;
-    }
+        }
 
-    if (g_machine == K10_MACHINE_GALAGA) {
+        if (g_machine == K10_MACHINE_GALAGA) {
         if ((input_state & K10_BUTTON_START) && (input_state & K10_BUTTON_COIN) &&
             !((last_input_state & K10_BUTTON_START) && (last_input_state & K10_BUTTON_COIN))) {
             g_machine = K10_MACHINE_MENU;
@@ -110,38 +109,38 @@ K10StateEvent k10_state_handle_input(uint8_t input_state, uint8_t last_input_sta
         }
 
         return K10_STATE_EVENT_NONE;
-    }
+        }
 
-    if (pressed(input_state, last_input_state, K10_BUTTON_COIN)) {
+        if (pressed(input_state, last_input_state, K10_BUTTON_COIN)) {
         g_machine = K10_MACHINE_MENU;
         k10_audio_set_dkong_rate(false);
         render_current_view();
         return K10_STATE_EVENT_RETURNED_TO_MENU;
-    }
+        }
 
-    return K10_STATE_EVENT_NONE;
-}
+        return K10_STATE_EVENT_NONE;
+        }
 
-bool k10_state_single_game_mode() {
-    return single_game_mode_enabled();
-}
+        bool k10_state_single_game_mode() {
+        return single_game_mode_enabled();
+        }
 
-bool k10_state_in_menu() {
-    return g_machine == K10_MACHINE_MENU;
-}
+        bool k10_state_in_menu() {
+        return g_machine == K10_MACHINE_MENU;
+        }
 
-K10Machine k10_state_current_machine() {
-    return g_machine;
-}
+        K10Machine k10_state_current_machine() {
+        return g_machine;
+        }
 
-K10Machine k10_state_menu_selection() {
-    return g_menu_selection;
-}
+        K10Machine k10_state_menu_selection() {
+        return k10_video_menu_machine(g_menu_index);
+        }
 
-const char* k10_state_current_name() {
-    if (g_machine == K10_MACHINE_MENU) {
-        return k10_video_menu_name(static_cast<int>(g_menu_selection));
-    }
+        const char* k10_state_current_name() {
+        if (g_machine == K10_MACHINE_MENU) {
+        return k10_video_menu_name(g_menu_index);
+        }
 
-    return k10_video_menu_name(static_cast<int>(g_machine));
-}
+        return k10_video_menu_name(g_menu_index); // This index matches the machine launched
+        }
