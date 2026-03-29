@@ -84,7 +84,7 @@ spi_bus_config_t g_bus_cfg = {
     .data5_io_num = -1,
     .data6_io_num = -1,
     .data7_io_num = -1,
-    .max_transfer_sz = K10_TFT_WIDTH * 8 * 2,
+    .max_transfer_sz = K10_TFT_WIDTH * K10_TFT_STRIP_HEIGHT * 2,
     .flags = SPICOMMON_BUSFLAG_MASTER,
     .isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO,
     .intr_flags = 0,
@@ -403,8 +403,8 @@ bool k10_video_begin() {
         printf("Video: expander prepare failed\n");
     }
 
-    g_frame_buffers[0] = static_cast<uint16_t*>(heap_caps_malloc(K10_TFT_ACTIVE_WIDTH * 8 * sizeof(uint16_t), MALLOC_CAP_DMA));
-    g_frame_buffers[1] = static_cast<uint16_t*>(heap_caps_malloc(K10_TFT_ACTIVE_WIDTH * 8 * sizeof(uint16_t), MALLOC_CAP_DMA));
+    g_frame_buffers[0] = static_cast<uint16_t*>(heap_caps_malloc(K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT * sizeof(uint16_t), MALLOC_CAP_DMA));
+    g_frame_buffers[1] = static_cast<uint16_t*>(heap_caps_malloc(K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT * sizeof(uint16_t), MALLOC_CAP_DMA));
     if (g_frame_buffers[0] == nullptr || g_frame_buffers[1] == nullptr) {
         printf("Video: frame buffer allocation failed\n");
         return false;
@@ -459,10 +459,15 @@ void k10_video_draw_menu_frame(int selection) {
 
     k10_video_begin_frame();
 
-    for (uint16_t tile_row = 0; tile_row < (K10_TFT_ACTIVE_HEIGHT / 8); ++tile_row) {
+    for (uint16_t strip_row = 0; strip_row < (K10_TFT_ACTIVE_HEIGHT / K10_TFT_STRIP_HEIGHT); ++strip_row) {
         uint16_t* buffer = g_frame_buffers[g_buffer_index];
-        render_menu_row(buffer, tile_row, selection);
-        k10_video_write(buffer, K10_TFT_ACTIVE_WIDTH * 8);
+        
+        // Render rows into the strip
+        for (int i = 0; i < (K10_TFT_STRIP_HEIGHT / 8); ++i) {
+            render_menu_row(buffer + K10_TFT_ACTIVE_WIDTH * 8 * i, strip_row * (K10_TFT_STRIP_HEIGHT / 8) + i, selection);
+        }
+        
+        k10_video_write(buffer, K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT);
     }
 
     k10_video_end_frame();
@@ -475,10 +480,15 @@ void k10_video_draw_machine_frame(int machine) {
 
     k10_video_begin_frame();
 
-    for (uint16_t tile_row = 0; tile_row < (K10_TFT_ACTIVE_HEIGHT / 8); ++tile_row) {
+    for (uint16_t strip_row = 0; strip_row < (K10_TFT_ACTIVE_HEIGHT / K10_TFT_STRIP_HEIGHT); ++strip_row) {
         uint16_t* buffer = g_frame_buffers[g_buffer_index];
-        render_machine_row(buffer, tile_row, machine);
-        k10_video_write(buffer, K10_TFT_ACTIVE_WIDTH * 8);
+        
+        // Render rows into the strip
+        for (int i = 0; i < (K10_TFT_STRIP_HEIGHT / 8); ++i) {
+            render_machine_row(buffer + K10_TFT_ACTIVE_WIDTH * 8 * i, strip_row * (K10_TFT_STRIP_HEIGHT / 8) + i, machine);
+        }
+        
+        k10_video_write(buffer, K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT);
     }
 
     k10_video_end_frame();

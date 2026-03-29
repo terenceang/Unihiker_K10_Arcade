@@ -46,7 +46,7 @@ unsigned short* frame_buffer = nullptr;
 
 namespace {
 
-constexpr uint32_t kFramePixels = 224 * 8;
+constexpr uint32_t kFramePixels = 224 * 16;
 constexpr uint32_t kFrameBytes = kFramePixels * sizeof(uint16_t);
 constexpr uint64_t kFramePeriodUs = 16667;
 constexpr uint32_t kEmulationTaskStackWords = 4096;
@@ -80,9 +80,18 @@ int16_t clamp_pcm16(int sample) {
     return static_cast<int16_t>(sample);
 }
 
-void render_line(short row) {
-    memset(frame_buffer, 0, kFrameBytes);
-    galaga_render_row(row);
+void render_line(short strip_row) {
+    // Render two 8-pixel high tile rows into the 16-pixel strip
+    unsigned short* original_buffer = frame_buffer;
+
+    // First row
+    galaga_render_row(strip_row * 2);
+
+    // Second row (offset buffer by 224 * 8 pixels)
+    frame_buffer += 224 * 8;
+    galaga_render_row(strip_row * 2 + 1);
+
+    frame_buffer = original_buffer;
 }
 
 void audio_namco_waveregs_parse_cpp() {
@@ -172,9 +181,9 @@ void update_screen_cpp() {
     galaga_prepare_frame();
 
     k10_video_begin_frame();
-    for (int tile_row = 0; tile_row < 36; ++tile_row) {
+    for (int strip_row = 0; strip_row < 18; ++strip_row) {
         frame_buffer = k10_video_get_draw_buffer();
-        render_line(static_cast<short>(tile_row));
+        render_line(static_cast<short>(strip_row));
         k10_video_write(frame_buffer, kFramePixels);
     }
     k10_video_end_frame();

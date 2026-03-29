@@ -28,6 +28,7 @@
 #define K10_TFT_HEIGHT 320
 #define K10_TFT_ACTIVE_WIDTH 224
 #define K10_TFT_ACTIVE_HEIGHT 288
+#define K10_TFT_STRIP_HEIGHT 16
 
 // Per-machine audio rates.
 #define K10_GALAGA_AUDIO_SAMPLE_RATE 24000
