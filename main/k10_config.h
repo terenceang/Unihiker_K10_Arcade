@@ -67,4 +67,8 @@
 // Currently set to 1 as button functions are temporarily disabled by the user.
 #define K10_DISABLE_ONBOARD_BUTTONS 1
 
+// System-wide defaults
+#define K10_AUDIO_VOLUME 10     // 0 (mute) to 100 (full)
+#define K10_LED_BRIGHTNESS 50   // 0 to 100
+
 #endif
