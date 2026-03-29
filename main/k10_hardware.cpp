@@ -16,7 +16,7 @@ namespace {
 constexpr i2c_port_t kI2CPort = I2C_NUM_0;
 constexpr uint32_t kI2CFrequencyHz = 400000;
 constexpr TickType_t kI2CTimeoutTicks = pdMS_TO_TICKS(50);
-constexpr size_t kAudioSilenceFrames = 64;
+constexpr size_t kAudioSilenceFrames = K10_AUDIO_BUFFER_FRAMES;
 
 bool g_i2c_ready = false;
 bool g_i2s_ready = false;

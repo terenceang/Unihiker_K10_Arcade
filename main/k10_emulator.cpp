@@ -1,6 +1,7 @@
 #include "k10_emulator.h"
 
 #include <esp_system.h>
+#include <esp_heap_caps.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -68,15 +69,11 @@ unsigned long snd_freq[3] = {0, 0, 0};
 const signed char* snd_wave[3] = {nullptr, nullptr, nullptr};
 unsigned char snd_volume[3] = {0, 0, 0};
 
-int16_t snd_buffer[128];
+int16_t* snd_buffer = nullptr;
 
 int16_t clamp_pcm16(int sample) {
-    if (sample > 32767) {
-        return 32767;
-    }
-    if (sample < -32768) {
-        return -32768;
-    }
+    if (sample > 32767) return 32767;
+    if (sample < -32768) return -32768;
     return static_cast<int16_t>(sample);
 }
 
@@ -115,28 +112,22 @@ void audio_namco_waveregs_parse_cpp() {
 }
 
 void snd_render_buffer_cpp() {
-    for (int index = 0; index < 64; ++index) {
-        short value = 0;
+    const int32_t vol_scale = (64 * AUDIO_VOLUME) / 100;
+    
+    for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
+        int32_t value = 0;
 
-        if (snd_volume[0]) {
-            value += snd_volume[0] * snd_wave[0][(snd_cnt[0] >> 13) & 0x1f];
-        }
-        if (snd_volume[1]) {
-            value += snd_volume[1] * snd_wave[1][(snd_cnt[1] >> 13) & 0x1f];
-        }
-        if (snd_volume[2]) {
-            value += snd_volume[2] * snd_wave[2][(snd_cnt[2] >> 13) & 0x1f];
-        }
+        if (snd_volume[0]) value += snd_volume[0] * snd_wave[0][(snd_cnt[0] >> 13) & 0x1f];
+        if (snd_volume[1]) value += snd_volume[1] * snd_wave[1][(snd_cnt[1] >> 13) & 0x1f];
+        if (snd_volume[2]) value += snd_volume[2] * snd_wave[2][(snd_cnt[2] >> 13) & 0x1f];
 
         if (snd_boom_cnt) {
             value += *snd_boom_ptr;
-            if (snd_boom_cnt & 1) {
-                snd_boom_ptr++;
-            }
+            if (snd_boom_cnt & 1) snd_boom_ptr++;
             snd_boom_cnt--;
         }
 
-        value = value * (64 * AUDIO_VOLUME / 100);
+        value *= vol_scale;
 
         const int16_t sample = clamp_pcm16(value);
         snd_buffer[2 * index] = sample;
@@ -149,10 +140,12 @@ void snd_render_buffer_cpp() {
 }
 
 void snd_transmit_cpp() {
+    if (snd_buffer == nullptr) return;
+    
     size_t bytes_out = 0;
+    // Synthesis loop: render and transmit as many buffers as I2S can accept
     do {
-        bytes_out = k10_audio_write(snd_buffer, sizeof(snd_buffer));
-
+        bytes_out = k10_audio_write(snd_buffer, K10_AUDIO_BUFFER_BYTES);
         if (bytes_out) {
             audio_namco_waveregs_parse_cpp();
             snd_render_buffer_cpp();
@@ -234,8 +227,12 @@ bool ensure_runtime_allocations() {
     if (sprite == nullptr) {
         sprite = static_cast<sprite_S*>(malloc(128 * sizeof(sprite_S)));
     }
+    
+    if (snd_buffer == nullptr) {
+        snd_buffer = static_cast<int16_t*>(heap_caps_malloc(K10_AUDIO_BUFFER_BYTES, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL));
+    }
 
-    g_runtime_ready = k10_video_get_draw_buffer() != nullptr && sprite != nullptr;
+    g_runtime_ready = k10_video_get_draw_buffer() != nullptr && sprite != nullptr && snd_buffer != nullptr;
     return g_runtime_ready;
 }
 
@@ -243,7 +240,9 @@ void reset_audio_state() {
     memset(snd_cnt, 0, sizeof(snd_cnt));
     memset(snd_freq, 0, sizeof(snd_freq));
     memset(snd_volume, 0, sizeof(snd_volume));
-    memset(snd_buffer, 0, sizeof(snd_buffer));
+    if (snd_buffer != nullptr) {
+        memset(snd_buffer, 0, K10_AUDIO_BUFFER_BYTES);
+    }
     snd_boom_cnt = 0;
     snd_boom_ptr = nullptr;
 }
@@ -259,6 +258,11 @@ void teardown_emulation_task() {
     if (memory != nullptr) {
         free(memory);
         memory = nullptr;
+    }
+    
+    if (snd_buffer != nullptr) {
+        free(snd_buffer);
+        snd_buffer = nullptr;
     }
 
     g_runtime_running = false;
@@ -315,11 +319,12 @@ bool k10_emulator_start(K10Machine machine) {
         return false;
     }
 
+    teardown_emulation_task();
+
     if (!k10_video_begin() || !ensure_runtime_allocations()) {
         return false;
     }
 
-    teardown_emulation_task();
     reset_audio_state();
     game_started = 0;
     g_cached_buttons = 0;

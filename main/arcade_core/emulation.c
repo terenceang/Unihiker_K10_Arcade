@@ -580,7 +580,11 @@ void prepare_emulation(void) {
     ResetZ80(&cpu[current_cpu]);
 
   current_cpu = 0;
+#ifdef ENABLE_GALAGA
+  current_rom_base = galaga_rom_cpu1;
+#else
   current_rom_base = NULL;
+#endif
 
 #ifdef ENABLE_DKONG
   i8048_reset(&cpu_8048);
