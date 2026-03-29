@@ -438,6 +438,9 @@ void k10_video_write(const uint16_t* colors, uint32_t len) {
     g_transaction.tx_buffer = colors;
     spi_device_queue_trans(g_tft_handle, &g_transaction, portMAX_DELAY);
     g_dma_active = true;
+
+    // Toggle the internal buffer index for the next draw.
+    g_buffer_index = static_cast<uint8_t>(1 - g_buffer_index);
 }
 
 void k10_video_end_frame() {
@@ -460,7 +463,6 @@ void k10_video_draw_menu_frame(int selection) {
         uint16_t* buffer = g_frame_buffers[g_buffer_index];
         render_menu_row(buffer, tile_row, selection);
         k10_video_write(buffer, K10_TFT_ACTIVE_WIDTH * 8);
-        g_buffer_index = static_cast<uint8_t>(1 - g_buffer_index);
     }
 
     k10_video_end_frame();
@@ -477,17 +479,13 @@ void k10_video_draw_machine_frame(int machine) {
         uint16_t* buffer = g_frame_buffers[g_buffer_index];
         render_machine_row(buffer, tile_row, machine);
         k10_video_write(buffer, K10_TFT_ACTIVE_WIDTH * 8);
-        g_buffer_index = static_cast<uint8_t>(1 - g_buffer_index);
     }
 
     k10_video_end_frame();
 }
 
-uint16_t* k10_video_get_buffer(int index) {
-    if (index < 0 || index > 1) {
-        return nullptr;
-    }
-    return g_frame_buffers[index];
+uint16_t* k10_video_get_draw_buffer() {
+    return g_frame_buffers[g_buffer_index];
 }
 
 int k10_video_wrap_menu_selection(int selection, int delta) {

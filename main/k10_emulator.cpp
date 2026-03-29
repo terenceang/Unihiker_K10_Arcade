@@ -173,10 +173,9 @@ void update_screen_cpp() {
 
     k10_video_begin_frame();
     for (int tile_row = 0; tile_row < 36; ++tile_row) {
-        frame_buffer = k10_video_get_buffer(g_buffer_index);
+        frame_buffer = k10_video_get_draw_buffer();
         render_line(static_cast<short>(tile_row));
         k10_video_write(frame_buffer, kFramePixels);
-        g_buffer_index = static_cast<uint8_t>(1 - g_buffer_index);
     }
     k10_video_end_frame();
 
@@ -224,7 +223,7 @@ bool ensure_runtime_allocations() {
         sprite = static_cast<sprite_S*>(malloc(128 * sizeof(sprite_S)));
     }
 
-    g_runtime_ready = k10_video_get_buffer(0) != nullptr && k10_video_get_buffer(1) != nullptr && sprite != nullptr;
+    g_runtime_ready = k10_video_get_draw_buffer() != nullptr && sprite != nullptr;
     return g_runtime_ready;
 }
 
@@ -292,7 +291,6 @@ bool k10_emulator_start(K10Machine machine) {
     reset_audio_state();
     game_started = 0;
     g_cached_buttons = 0;
-    g_buffer_index = 0;
     g_present_task = xTaskGetCurrentTaskHandle();
     ulTaskNotifyTake(pdTRUE, 0);
 
