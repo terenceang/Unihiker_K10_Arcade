@@ -316,20 +316,13 @@ static inline void galaga_prepare_frame(void) {
 static inline void galaga_blit_tile(short row, char col) {
   unsigned short addr = tileaddr[row][col];
 
-  const unsigned short *colors = galaga_colormap_tiles[memory[0x400 + addr] & 63];  
-  unsigned short *ptr = frame_buffer + 8*col;
-
-  // blank galaga tiles (0x24)
-  if(memory[addr] == 0x24) {
-    for(char r=0;r<8;r++,ptr+=(224-8)) {
-      for(char c=0;c<8;c++) {
-        *ptr++ = 0;
-      }
-    }
-    return;
-  }
+  // skip blank galaga tiles (0x24) in rendering  
+  if(memory[addr] == 0x24) return;
   
   const unsigned short *tile = gg1_9_4l[memory[addr]];
+  const unsigned short *colors = galaga_colormap_tiles[memory[0x400 + addr] & 63];  
+
+  unsigned short *ptr = frame_buffer + 8*col;
 
   // 8 pixel rows per tile
   for(char r=0;r<8;r++,ptr+=(224-8)) {
@@ -337,7 +330,6 @@ static inline void galaga_blit_tile(short row, char col) {
     // 8 pixel columns per tile
     for(char c=0;c<8;c++,pix>>=2) {
       if(pix & 3) *ptr = colors[pix&3];
-      else *ptr = 0;
       ptr++;
     }
   }
@@ -402,9 +394,11 @@ static void render_stars_set(short row, const struct galaga_star *set) {
 }
 
 static inline void galaga_render_row(short row) {
-  // render 28 tile columns per row
-  for(char col=0;col<28;col++)
-    galaga_blit_tile(row, col);
+  if(starcontrol & 0x20) {
+    /* two sets of stars controlled by these bits */
+    render_stars_set(row, galaga_star_set[(starcontrol & 0x08)?1:0]);
+    render_stars_set(row, galaga_star_set[(starcontrol & 0x10)?3:2]);
+  }
 
   // render sprites
   for(unsigned char s=0;s<active_sprites;s++) {
@@ -413,11 +407,9 @@ static inline void galaga_render_row(short row) {
       galaga_blit_sprite(row, s);
   }
 
-  if(starcontrol & 0x20) {
-    /* two sets of stars controlled by these bits */
-    render_stars_set(row, galaga_star_set[(starcontrol & 0x08)?1:0]);
-    render_stars_set(row, galaga_star_set[(starcontrol & 0x10)?3:2]);
-  }
+  // render 28 tile columns per row
+  for(char col=0;col<28;col++)
+    galaga_blit_tile(row, col);
 } 
 
 #endif // IO_EMULATION
