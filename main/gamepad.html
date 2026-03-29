@@ -1,0 +1,74 @@
+<!-- gamepad.html: Simple virtual gamepad for K10 WiFi receiver -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>K10 WiFi Gamepad</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { background: #111; color: #fff; font-family: sans-serif; text-align: center; }
+    .dpad, .buttons { display: inline-block; margin: 2em; }
+    .dpad button, .buttons button { width: 60px; height: 60px; margin: 5px; font-size: 1.5em; border-radius: 50%; border: none; background: #333; color: #fff; }
+    .dpad button:active, .buttons button:active { background: #0af; }
+    .sticks { margin: 2em; }
+    input[type=range] { width: 120px; }
+  </style>
+</head>
+<body>
+  <h1>K10 WiFi Gamepad</h1>
+  <div class="dpad">
+    <div><button id="up">▲</button></div>
+    <div>
+      <button id="left">◀</button>
+      <button id="center">●</button>
+      <button id="right">▶</button>
+    </div>
+    <div><button id="down">▼</button></div>
+  </div>
+  <div class="buttons">
+    <button id="a">A</button>
+    <button id="b">B</button>
+    <button id="start">Start</button>
+    <button id="coin">Coin</button>
+  </div>
+  <div class="sticks">
+    <div>LX: <input type="range" id="lx" min="-128" max="127" value="0"></div>
+    <div>LY: <input type="range" id="ly" min="-128" max="127" value="0"></div>
+    <div>RX: <input type="range" id="rx" min="-128" max="127" value="0"></div>
+    <div>RY: <input type="range" id="ry" min="-128" max="127" value="0"></div>
+  </div>
+  <script>
+    // Button/hat bitmasks (must match k10_input.h)
+    // A = FIRE (0x10), B = COIN (0x40), Start = START (0x20), Coin = EXTRA (0x80)
+    const BTN_A = 0x10, BTN_B = 0x40, BTN_START = 0x20, BTN_COIN = 0x80;
+    let buttons = 0, hat = 8, lx = 0, ly = 0, rx = 0, ry = 0;
+    function send() {
+      fetch('/gamepad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ buttons, hat, lx, ly, rx, ry })
+      });
+    }
+    // D-pad: only send on press
+    document.getElementById('up').ontouchstart = () => { hat = 0; send(); };
+    document.getElementById('down').ontouchstart = () => { hat = 4; send(); };
+    document.getElementById('left').ontouchstart = () => { hat = 6; send(); };
+    document.getElementById('right').ontouchstart = () => { hat = 2; send(); };
+    document.getElementById('center').ontouchstart = () => { hat = 8; send(); };
+    document.getElementById('up').ontouchend = document.getElementById('down').ontouchend =
+    document.getElementById('left').ontouchend = document.getElementById('right').ontouchend =
+    document.getElementById('center').ontouchend = () => { hat = 8; };
+    // Buttons: only send on press
+    function setBtn(id, mask) {
+      const btn = document.getElementById(id);
+      btn.ontouchstart = () => { buttons |= mask; send(); };
+      btn.ontouchend = () => { buttons &= ~mask; };
+    }
+    setBtn('a', BTN_A); setBtn('b', BTN_B); setBtn('start', BTN_START); setBtn('coin', BTN_COIN);
+    // Sticks: do not send on move
+    ['lx','ly','rx','ry'].forEach(axis => {
+      document.getElementById(axis).oninput = e => { window[axis] = parseInt(e.target.value); };
+    });
+  </script>
+</body>
+</html>

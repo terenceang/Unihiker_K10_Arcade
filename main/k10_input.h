@@ -21,4 +21,21 @@ enum : uint8_t {
     K10_BUTTON_EXTRA = 0x80,
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Gamepad state struct for WiFi/BLE/other input sources
+typedef struct {
+    uint16_t buttons; // Bitmask of buttons (A, B, Start, Coin, etc)
+    uint8_t hat;      // D-pad/hat value (0-7 = directions, 8 = center)
+    int8_t lx, ly;    // Left stick X/Y (-128..127)
+    int8_t rx, ry;    // Right stick X/Y (-128..127)
+    bool connected;   // True if controller is active (optional for WiFi)
+} k10_gamepad_state_t;
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif
