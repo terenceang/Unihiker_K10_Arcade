@@ -46,7 +46,7 @@ unsigned short* frame_buffer = nullptr;
 
 namespace {
 
-constexpr uint32_t kFramePixels = 224 * 16;
+constexpr uint32_t kFramePixels = K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT;
 constexpr uint32_t kFrameBytes = kFramePixels * sizeof(uint16_t);
 constexpr uint64_t kFramePeriodUs = 16667;
 constexpr uint32_t kEmulationTaskStackWords = 4096;
@@ -90,8 +90,8 @@ void render_line(short strip_row) {
     // First row
     galaga_render_row(strip_row * 2);
 
-    // Second row (offset buffer by 224 * 8 pixels)
-    frame_buffer += 224 * 8;
+    // Second row (offset buffer by K10_TFT_ACTIVE_WIDTH * 8 pixels)
+    frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
     galaga_render_row(strip_row * 2 + 1);
 
     frame_buffer = original_buffer;
@@ -184,7 +184,7 @@ void update_screen_cpp() {
     galaga_prepare_frame();
 
     k10_video_begin_frame();
-    for (int strip_row = 0; strip_row < 18; ++strip_row) {
+    for (int strip_row = 0; strip_row < K10_TFT_STRIP_COUNT; ++strip_row) {
         frame_buffer = k10_video_get_draw_buffer();
         render_line(static_cast<short>(strip_row));
         k10_video_write(frame_buffer, kFramePixels);

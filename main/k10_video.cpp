@@ -365,7 +365,7 @@ bool k10_video_begin() {
 
     configure_output_gpio(K10_TFT_CS, 1);
     configure_output_gpio(K10_TFT_DC, 1);
-    configure_output_gpio(40, 1);
+    configure_output_gpio(K10_TFT_ENABLE, 1);
 
     esp_err_t result = spi_bus_initialize(SPI3_HOST, &g_bus_cfg, SPI_DMA_CH_AUTO);
     if (result != ESP_OK && result != ESP_ERR_INVALID_STATE) {
