@@ -15,6 +15,7 @@
 #define K10_I2S_MCLK 3
 
 // TFT panel SPI wiring and visible area calibration.
+#define K10_TFT_SPI_HOST SPI3_HOST
 #define K10_TFT_SPICLK 80000000
 #define K10_TFT_MISO -1
 #define K10_TFT_MOSI 21
@@ -23,6 +24,7 @@
 #define K10_TFT_DC 13
 #define K10_TFT_RST -1
 #define K10_TFT_ENABLE 40
+#define K10_TFT_MADCTL 0x48
 #define K10_TFT_X_OFFSET 8
 #define K10_TFT_Y_OFFSET 16
 #define K10_TFT_WIDTH 240

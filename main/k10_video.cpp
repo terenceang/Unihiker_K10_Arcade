@@ -14,16 +14,16 @@
 
 namespace {
 
-constexpr uint8_t kTftMac = 0x48;
 constexpr int16_t kLogoTop = (K10_TFT_ACTIVE_HEIGHT - 96) / 2;
 constexpr uint16_t kPanelBackground = 0x0000;
 constexpr uint16_t kMenuBackground = 0x0000;
 
 spi_device_handle_t g_tft_handle = nullptr;
-spi_transaction_t g_transaction = {};
+spi_transaction_t g_transactions[2] = {};
 bool g_video_ready = false;
 uint16_t* g_frame_buffers[2] = {nullptr, nullptr};
 uint8_t g_buffer_index = 0;
+int g_in_flight_count = 0;
 bool g_dma_active = false;
 
 void configure_output_gpio(int pin, uint32_t initial_level) {
@@ -69,7 +69,7 @@ spi_device_interface_config_t g_if_cfg = {
     .input_delay_ns = 0,
     .spics_io_num = -1,
     .flags = SPI_DEVICE_HALFDUPLEX,
-    .queue_size = 1,
+    .queue_size = 2,
     .pre_cb = nullptr,
     .post_cb = nullptr,
 };
@@ -104,7 +104,7 @@ const uint8_t kInitCmds[] = {
     0xC1, 1, 0x10,
     0xC5, 2, 0x3e, 0x28,
     0xC7, 1, 0x86,
-    0x36, 1, static_cast<uint8_t>(kTftMac ^ 0xc0),
+    0x36, 1, static_cast<uint8_t>(K10_TFT_MADCTL ^ 0xc0),
     0x37, 1, 0x00,
     0x3A, 1, 0x55,
     0xB1, 2, 0x00, 0x18,
@@ -176,12 +176,11 @@ void set_addr_window(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
 }
 
 void flush_dma() {
-    if (!g_dma_active) {
-        return;
+    while (g_in_flight_count > 0) {
+        spi_transaction_t* completed = nullptr;
+        spi_device_get_trans_result(g_tft_handle, &completed, portMAX_DELAY);
+        g_in_flight_count--;
     }
-
-    spi_transaction_t* completed = nullptr;
-    spi_device_get_trans_result(g_tft_handle, &completed, portMAX_DELAY);
     g_dma_active = false;
 }
 
@@ -367,13 +366,13 @@ bool k10_video_begin() {
     configure_output_gpio(K10_TFT_DC, 1);
     configure_output_gpio(K10_TFT_ENABLE, 1);
 
-    esp_err_t result = spi_bus_initialize(SPI3_HOST, &g_bus_cfg, SPI_DMA_CH_AUTO);
+    esp_err_t result = spi_bus_initialize(K10_TFT_SPI_HOST, &g_bus_cfg, SPI_DMA_CH_AUTO);
     if (result != ESP_OK && result != ESP_ERR_INVALID_STATE) {
         printf("Video: SPI bus init failed: 0x%x\n", result);
         return false;
     }
 
-    result = spi_bus_add_device(SPI3_HOST, &g_if_cfg, &g_tft_handle);
+    result = spi_bus_add_device(K10_TFT_SPI_HOST, &g_if_cfg, &g_tft_handle);
     if (result == ESP_ERR_INVALID_STATE && g_tft_handle != nullptr) {
         result = ESP_OK;
     }
@@ -430,13 +429,17 @@ void k10_video_write(const uint16_t* colors, uint32_t len) {
         return;
     }
 
-    flush_dma();
-
-    g_transaction.flags = 0;
-    g_transaction.length = len * 16;
-    g_transaction.rxlength = 0;
-    g_transaction.tx_buffer = colors;
-    spi_device_queue_trans(g_tft_handle, &g_transaction, portMAX_DELAY);
+    // We use the transaction struct that corresponds to the buffer we are currently writing.
+    // The caller is expected to have gotten this buffer via k10_video_get_draw_buffer(),
+    // which ensures the buffer is not in flight.
+    
+    int trans_idx = g_buffer_index;
+    memset(&g_transactions[trans_idx], 0, sizeof(spi_transaction_t));
+    g_transactions[trans_idx].length = len * 16;
+    g_transactions[trans_idx].tx_buffer = colors;
+    
+    spi_device_queue_trans(g_tft_handle, &g_transactions[trans_idx], portMAX_DELAY);
+    g_in_flight_count++;
     g_dma_active = true;
 
     // Toggle the internal buffer index for the next draw.
@@ -460,7 +463,7 @@ void k10_video_draw_menu_frame(int selection) {
     k10_video_begin_frame();
 
     for (uint16_t strip_row = 0; strip_row < (K10_TFT_ACTIVE_HEIGHT / K10_TFT_STRIP_HEIGHT); ++strip_row) {
-        uint16_t* buffer = g_frame_buffers[g_buffer_index];
+        uint16_t* buffer = k10_video_get_draw_buffer();
         
         // Render rows into the strip
         for (int i = 0; i < (K10_TFT_STRIP_HEIGHT / 8); ++i) {
@@ -481,7 +484,7 @@ void k10_video_draw_machine_frame(int machine) {
     k10_video_begin_frame();
 
     for (uint16_t strip_row = 0; strip_row < (K10_TFT_ACTIVE_HEIGHT / K10_TFT_STRIP_HEIGHT); ++strip_row) {
-        uint16_t* buffer = g_frame_buffers[g_buffer_index];
+        uint16_t* buffer = k10_video_get_draw_buffer();
         
         // Render rows into the strip
         for (int i = 0; i < (K10_TFT_STRIP_HEIGHT / 8); ++i) {
@@ -495,6 +498,11 @@ void k10_video_draw_machine_frame(int machine) {
 }
 
 uint16_t* k10_video_get_draw_buffer() {
+    if (g_in_flight_count >= 2) {
+        spi_transaction_t* completed = nullptr;
+        spi_device_get_trans_result(g_tft_handle, &completed, portMAX_DELAY);
+        g_in_flight_count--;
+    }
     return g_frame_buffers[g_buffer_index];
 }
 
