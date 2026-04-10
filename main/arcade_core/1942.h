@@ -21,8 +21,8 @@ static inline unsigned char _1942_RdZ80(unsigned short Addr) {
     // CPU1 banked ROM
     if((Addr & 0xc000) == 0x8000) {
       if(_1942_bank == 0)                         return _1942_rom_cpu1_b0[Addr - 0x8000];
-      else if((_1942_bank == 1)&&(Addr < 0xb000)) return _1942_rom_cpu1_b1[Addr - 0x8000];
-      else if(_1942_bank == 2)	                  return _1942_rom_cpu1_b2[Addr - 0x8000];
+      else if((_1942_bank == 1) && (Addr < 0xa000)) return _1942_rom_cpu1_b1[Addr - 0x8000];
+      else if(_1942_bank == 2)                          return _1942_rom_cpu1_b2[Addr - 0x8000];
     }
     
     // RAM mapping
@@ -79,10 +79,10 @@ static inline unsigned char _1942_RdZ80(unsigned short Addr) {
     if(Addr == 0xc002) return 0xff;
     
     // DIP A
-    if(Addr == 0xc003) return ~_1942_DIP_A;
+    if(Addr == 0xc003) return (unsigned char)(~_1942_DIP_A);
     
     // DIP B
-    if(Addr == 0xc004) return ~_1942_DIP_B;
+    if(Addr == 0xc004) return (unsigned char)(~_1942_DIP_B);
     
   } else {
     // second/audio CPU

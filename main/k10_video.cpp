@@ -259,9 +259,9 @@ static void render_menu_row(uint16_t* tile_buf, int tile_row, int selection_inde
     const int sel   = normalize_selection(selection_index);
     const int count = static_cast<int>(kMenuEntryCount);
 
-    // Shift the carousel so `sel` sits two logo-heights down from the scroll
+    // Shift the carousel so `sel` sits one logo-height down from the scroll
     // origin, which centres it on a three-logo display.
-    const int carousel_offset = kLogoHeight * ((sel + count - 2) % count);
+    const int carousel_offset = kLogoHeight * ((sel + count - 1) % count);
     const int scroll_y        = tile_row * 8 + carousel_offset;
 
     // Which logo occupies the top of this tile, and how far into it are we?
