@@ -121,25 +121,20 @@ void audio_galaga_waveregs_parse() {
 #endif
 
 #ifdef ENABLE_PACMAN
-// Pac-Man Namco WSG register layout (each reg holds one 4-bit nibble):
-//   Voice ch: regs [ch*5 .. ch*5+4] = 20-bit freq accumulator (low..high nibble)
-//             reg  [ch*5+5]          = volume (bits 3:0)
-//   Waveform: upper 3 bits of the high-freq nibble (soundregs[ch*5+4] >> 1)
+// Pac-Man Namco WSG register layout (each reg holds one 4-bit nibble).
+// Identical freq/volume layout as Galaga (soundregs[ch*5 + 0x10..0x15]).
+// Difference: Pac-Man wavetable has 16 entries (4-bit index), Galaga has 8 (3-bit).
 void audio_pacman_waveregs_parse() {
     for (int ch = 0; ch < 3; ++ch) {
-        const int base = ch * 5;
-        snd_volume[ch] = soundregs[base + 5] & 0x0f;
+        snd_volume[ch] = soundregs[ch * 5 + 0x15];
         if (!snd_volume[ch]) continue;
 
-        snd_freq[ch]  = soundregs[base + 0];
-        snd_freq[ch] |= soundregs[base + 1] << 4;
-        snd_freq[ch] |= soundregs[base + 2] << 8;
-        snd_freq[ch] |= soundregs[base + 3] << 12;
-        snd_freq[ch] |= (soundregs[base + 4] & 0x01) << 16;
-        snd_freq[ch] <<= 4;  // scale to match synthesis step size
-
-        const int wave_sel = (soundregs[base + 4] >> 1) & 0x07;
-        snd_wave[ch] = pacman_wavetable[wave_sel];
+        snd_freq[ch]  = (ch == 0) ? soundregs[0x10] : 0;
+        snd_freq[ch] += soundregs[ch * 5 + 0x11] << 4;
+        snd_freq[ch] += soundregs[ch * 5 + 0x12] << 8;
+        snd_freq[ch] += soundregs[ch * 5 + 0x13] << 12;
+        snd_freq[ch] += soundregs[ch * 5 + 0x14] << 16;
+        snd_wave[ch]  = pacman_wavetable[soundregs[ch * 5 + 0x05] & 0x0f];
     }
 }
 #endif

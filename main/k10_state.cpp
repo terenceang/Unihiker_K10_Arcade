@@ -201,19 +201,10 @@ K10StateEvent k10_state_handle_input(uint8_t input_state, uint8_t last_input_sta
     }
 
     // ── In-game: return-to-menu combos ────────────────────────────────────────
-    if (g_machine == K10_MACHINE_GALAGA) {
-        if ((input_state & K10_BUTTON_START) && (input_state & K10_BUTTON_COIN) &&
-            !((last_input_state & K10_BUTTON_START) && (last_input_state & K10_BUTTON_COIN))) {
-            g_machine = K10_MACHINE_MENU;
-            k10_audio_set_dkong_rate(false);
-            reset_idle_timer();
-            render_current_view();
-            return K10_STATE_EVENT_RETURNED_TO_MENU;
-        }
-        return K10_STATE_EVENT_NONE;
-    }
-
-    if (pressed(input_state, last_input_state, K10_BUTTON_COIN)) {
+    // All games: START+COIN together returns to menu (same as Galaga).
+    // This ensures COIN alone can be passed through to the game for inserting credits.
+    if ((input_state & K10_BUTTON_START) && (input_state & K10_BUTTON_COIN) &&
+        !((last_input_state & K10_BUTTON_START) && (last_input_state & K10_BUTTON_COIN))) {
         g_machine = K10_MACHINE_MENU;
         k10_audio_set_dkong_rate(false);
         reset_idle_timer();
