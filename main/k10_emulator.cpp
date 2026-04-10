@@ -481,8 +481,6 @@ bool k10_emulator_start(K10Machine machine) {
     // like 1942 that set game_started=1 on the very first frame before the
     // present task has had a chance to send any notifications back.
     xTaskNotifyGive(g_emulation_task);
-        return false;
-    }
 
     g_runtime_running = true;
     return true;
