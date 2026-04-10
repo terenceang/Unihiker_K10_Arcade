@@ -21,7 +21,7 @@ static const char *TAG = "K10_STATE";
 // If no gamepad/button input is received for this many milliseconds while the
 // menu is showing, a random game is launched automatically.
 // Change this value to adjust the delay.
-#define K10_IDLE_LAUNCH_TIMEOUT_MS  3000
+#define K10_IDLE_LAUNCH_TIMEOUT_MS  30000
 
 // ── NVS persistence ────────────────────────────────────────────────────────────
 static const char *kNvsNamespace = "k10_state";

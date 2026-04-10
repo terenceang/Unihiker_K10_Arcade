@@ -4,7 +4,7 @@
 #include "../k10_config.h"
 
 // disable e.g. if roms are missing
-// #define ENABLE_PACMAN
+#define ENABLE_PACMAN
 #define ENABLE_GALAGA
 // #define ENABLE_DKONG
 // #define ENABLE_FROGGER

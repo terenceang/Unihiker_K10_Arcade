@@ -1,5 +1,6 @@
 #include "k10_video.h"
 
+#include <algorithm>
 #include <esp_heap_caps.h>
 #include <string.h>
 
@@ -20,17 +21,331 @@
 
 namespace {
 
-constexpr int16_t kLogoTop = (K10_TFT_ACTIVE_HEIGHT - 96) / 2;
-constexpr uint16_t kPanelBackground = 0x0000;
-constexpr uint16_t kMenuBackground = 0x0000;
+// ── Display geometry ──────────────────────────────────────────────────────────
 
-spi_device_handle_t g_tft_handle = nullptr;
-spi_transaction_t g_transactions[2] = {};
-bool g_video_ready = false;
-uint16_t* g_frame_buffers[2] = {nullptr, nullptr};
-uint8_t g_buffer_index = 0;
-int g_in_flight_count = 0;
-bool g_dma_active = false;
+// All logos are exactly this many pixels tall.
+constexpr int kLogoHeight    = 96;
+// Tile rows per logo (logo height / tile height).
+constexpr int kLogoRowsCount = kLogoHeight / 8;
+// Vertical pixel offset so the centred logo is visually middle-of-screen.
+constexpr int16_t kLogoTop = (K10_TFT_ACTIVE_HEIGHT - kLogoHeight) / 2;
+
+constexpr uint16_t kPanelBackground = 0x0000;
+
+// ── SPI / TFT state ───────────────────────────────────────────────────────────
+
+spi_device_handle_t g_tft_handle     = nullptr;
+spi_transaction_t   g_transactions[2] = {};
+bool                g_video_ready    = false;
+uint16_t*           g_frame_buffers[2] = {nullptr, nullptr};
+uint8_t             g_buffer_index   = 0;
+int                 g_in_flight_count = 0;
+bool                g_dma_active     = false;
+
+// ── Menu entry table ──────────────────────────────────────────────────────────
+
+struct MenuEntry {
+    K10Machine      machine;
+    const char*     name;
+    const uint16_t* logo;
+    uint16_t        accent;
+};
+
+const MenuEntry g_menu_entries[] = {
+#ifdef ENABLE_PACMAN
+    {K10_MACHINE_PACMAN,  "Pac-Man",     pacman_logo,  0x07e0},
+#endif
+#ifdef ENABLE_GALAGA
+    {K10_MACHINE_GALAGA,  "Galaga",      galaga_logo,  0xf800},
+#endif
+#ifdef ENABLE_DKONG
+    {K10_MACHINE_DKONG,   "Donkey Kong", dkong_logo,   0xfd20},
+#endif
+#ifdef ENABLE_FROGGER
+    {K10_MACHINE_FROGGER, "Frogger",     frogger_logo, 0x07ff},
+#endif
+#ifdef ENABLE_DIGDUG
+    {K10_MACHINE_DIGDUG,  "Dig Dug",     digdug_logo,  0xf81f},
+#endif
+#ifdef ENABLE_1942
+    {K10_MACHINE_1942,    "1942",        _1942_logo,   0xffe0},
+#endif
+};
+
+constexpr size_t kMenuEntryCount = sizeof(g_menu_entries) / sizeof(g_menu_entries[0]);
+
+// ── Logo row cache ────────────────────────────────────────────────────────────
+//
+// Scanning an RLE-compressed logo from the start every time render_logo() is
+// called for a new tile row is O(logo_size) per row.  Instead we precompute
+// the decoder state at the start of each 8-pixel logo row once at init, making
+// every subsequent seek O(1).
+
+struct LogoRowEntry {
+    const uint16_t* ptr;         // data pointer at the start of this row
+    uint16_t        carry_color; // color of any RLE run that straddles the row boundary
+    uint16_t        carry_count; // how many pixels of carry_color precede fresh data
+};
+
+static LogoRowEntry g_logo_cache[kMenuEntryCount][kLogoRowsCount];
+
+// Build the per-row cache for every enabled logo.  Called once during init.
+static void build_logo_cache() {
+    for (size_t li = 0; li < kMenuEntryCount; ++li) {
+        const uint16_t* logo = g_menu_entries[li].logo;
+        if (!logo) continue;
+
+        const uint16_t  marker      = logo[0];
+        const uint16_t* ptr         = logo + 1;
+        uint16_t        carry_color = 0;
+        uint16_t        carry_count = 0;
+
+        for (int row = 0; row < kLogoRowsCount; ++row) {
+            g_logo_cache[li][row] = {ptr, carry_color, carry_count};
+
+            // Walk through exactly 8 pixel rows worth of pixels (one tile row).
+            // Each cache entry spans logo_y values 0, 8, 16, …, 88, so the
+            // stride is 8 × K10_TFT_ACTIVE_WIDTH, not just K10_TFT_ACTIVE_WIDTH.
+            uint32_t remaining = K10_TFT_ACTIVE_WIDTH * 8;
+
+            // Consume any carry-over from the previous row first.
+            if (carry_count > 0) {
+                uint32_t take = std::min<uint32_t>(carry_count, remaining);
+                carry_count -= static_cast<uint16_t>(take);
+                remaining   -= take;
+            }
+
+            while (remaining > 0) {
+                if (*ptr == marker) {
+                    uint32_t run = static_cast<uint32_t>(ptr[1]) + 1;
+                    carry_color  = ptr[2];
+                    ptr += 3;
+                    if (run <= remaining) {
+                        remaining  -= run;
+                        carry_count = 0;
+                    } else {
+                        carry_count = static_cast<uint16_t>(run - remaining);
+                        remaining   = 0;
+                    }
+                } else {
+                    ++ptr;
+                    --remaining;
+                }
+            }
+        }
+    }
+}
+
+// ── Colour helpers ────────────────────────────────────────────────────────────
+
+// Convert a byte-swapped RGB565 pixel to greyscale.
+//
+// Logo pixels are stored byte-swapped for direct DMA to the ILI9341 (which
+// expects big-endian RGB565).  In this layout a uint16_t value has:
+//   bits 15-13 = G[2:0], bits 12-8 = B[4:0], bits 7-3 = R[4:0], bits 2-0 = G[5:3]
+//
+// The luminance is (2R + G + 2B) / 4 where R,B are 5-bit and G is 6-bit.
+// The result is packed back into byte-swapped RGB565 with R = B = luma/2,
+// G = luma (green has twice the bit-depth so it carries the full luma value).
+static uint16_t greyscale(uint16_t input) {
+    const uint16_t r5    = (input >> 3) & 0x1F;
+    const uint16_t g6    = ((input << 3) & 0x38) | ((input >> 13) & 0x07);
+    const uint16_t b5    = (input >> 8) & 0x1F;
+    const uint16_t luma  = static_cast<uint16_t>((2 * r5 + g6 + 2 * b5) / 4);
+
+    // Reconstruct byte-swapped RGB565: R = B = luma[4:0] (via luma[5:1]),
+    // G[5:0] = luma[5:0].
+    return static_cast<uint16_t>(
+        ((luma << 13) & 0xe000) |   // G[2:0]
+        ((luma <<  7) & 0x1f00) |   // B[4:0]
+        ((luma <<  2) & 0x00f8) |   // R[4:0]
+        ((luma >>  3) & 0x0007)     // G[5:3]
+    );
+}
+
+// ── Logo renderer ─────────────────────────────────────────────────────────────
+
+// Render one 8-pixel tile strip of a logo into tile_buf.
+//
+//   logo_idx  index into g_menu_entries (and g_logo_cache)
+//   logo_y    the logo pixel row that maps to the TOP of this tile; must be
+//             a multiple of 8.
+//               >= 0  we start at logo_y pixels into the logo
+//               <  0  the logo starts |logo_y| pixels below the tile top;
+//                     the leading rows of the buffer are left untouched (black)
+//   active    true = full colour, false = greyscale
+//   tile_buf  caller-provided buffer for K10_TFT_ACTIVE_WIDTH × 8 pixels
+static void render_logo(int logo_idx, int16_t logo_y, bool active, uint16_t* tile_buf) {
+    const int tile_pixels = K10_TFT_ACTIVE_WIDTH * 8;
+
+    // Buffer range to fill.
+    const int buf_start = (logo_y < 0) ? (-logo_y * K10_TFT_ACTIVE_WIDTH) : 0;
+    const int logo_px_start = (logo_y >= 0) ? (logo_y * K10_TFT_ACTIVE_WIDTH) : 0;
+    const int logo_px_remaining = kLogoHeight * K10_TFT_ACTIVE_WIDTH - logo_px_start;
+    const int buf_end = buf_start + std::min(logo_px_remaining, tile_pixels - buf_start);
+
+    if (buf_end <= buf_start) return;
+
+    // Look up the precomputed decoder state for this logo row.
+    const int cache_row = (logo_y >= 0) ? (logo_y / 8) : 0;
+    const LogoRowEntry& e = g_logo_cache[logo_idx][cache_row];
+
+    const uint16_t  marker = g_menu_entries[logo_idx].logo[0];
+    const uint16_t* ptr    = e.ptr;
+    uint16_t carry_count   = e.carry_count;
+    uint16_t carry_color   = e.carry_color;
+
+    int i = buf_start;
+
+    // Emit any pixels carried over from the RLE run that ended the previous row.
+    if (carry_count > 0) {
+        const uint16_t c = active ? carry_color : greyscale(carry_color);
+        while (carry_count > 0 && i < buf_end) {
+            tile_buf[i++] = c;
+            --carry_count;
+        }
+    }
+
+    // Decode and emit pixels until we've filled the buffer range.
+    while (i < buf_end) {
+        if (*ptr == marker) {
+            const uint16_t color = active ? ptr[2] : greyscale(ptr[2]);
+            uint16_t run = ptr[1] + 1;
+            ptr += 3;
+            while (run-- > 0 && i < buf_end) {
+                tile_buf[i++] = color;
+            }
+        } else {
+            tile_buf[i++] = active ? *ptr : greyscale(*ptr);
+            ++ptr;
+        }
+    }
+}
+
+// ── Menu / machine tile renderers ─────────────────────────────────────────────
+
+static int normalize_selection(int idx) {
+    if (idx < 0 || idx >= static_cast<int>(kMenuEntryCount)) return 0;
+    return idx;
+}
+
+static const MenuEntry* menu_entry_for_machine(int machine) {
+    for (size_t i = 0; i < kMenuEntryCount; ++i) {
+        if (g_menu_entries[i].machine == static_cast<K10Machine>(machine))
+            return &g_menu_entries[i];
+    }
+    return nullptr;
+}
+
+// Returns the index into g_menu_entries for a given machine, or -1.
+static int logo_idx_for_machine(int machine) {
+    for (size_t i = 0; i < kMenuEntryCount; ++i) {
+        if (g_menu_entries[i].machine == static_cast<K10Machine>(machine))
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+// Render one 8-pixel tile row of the scrolling logo carousel.
+//
+// The carousel wraps all enabled game logos (each kLogoHeight px tall) in a
+// vertical strip that fills the display.  The selected game is rendered in full
+// colour; all others are greyscale.  A carousel offset is applied so the game
+// two positions before the selection aligns with the top of the screen — this
+// places the selected logo in a consistent visual slot regardless of count.
+static void render_menu_row(uint16_t* tile_buf, int tile_row, int selection_index) {
+    memset(tile_buf, 0, K10_TFT_ACTIVE_WIDTH * 8 * sizeof(uint16_t));
+
+    const int sel   = normalize_selection(selection_index);
+    const int count = static_cast<int>(kMenuEntryCount);
+
+    // Shift the carousel so `sel` sits two logo-heights down from the scroll
+    // origin, which centres it on a three-logo display.
+    const int carousel_offset = kLogoHeight * ((sel + count - 2) % count);
+    const int scroll_y        = tile_row * 8 + carousel_offset;
+
+    // Which logo occupies the top of this tile, and how far into it are we?
+    // logo_y is always a multiple of 8 because tile_row*8 and carousel_offset
+    // are both multiples of 8.
+    int     logo_idx = (scroll_y / kLogoHeight) % count;
+    int16_t logo_y   = static_cast<int16_t>(scroll_y % kLogoHeight);
+
+    if (g_menu_entries[logo_idx].logo) {
+        render_logo(logo_idx, logo_y, sel == logo_idx, tile_buf);
+    }
+
+    // If this logo ends mid-tile, render the leading rows of the next logo.
+    if (logo_y > kLogoHeight - 8) {
+        const int next_idx = (logo_idx + 1) % count;
+        // next_y is negative: the next logo begins |next_y| pixels below tile top.
+        const int16_t next_y = static_cast<int16_t>(logo_y - kLogoHeight);
+        if (g_menu_entries[next_idx].logo) {
+            render_logo(next_idx, next_y, sel == next_idx, tile_buf);
+        }
+    }
+}
+
+static void fill_row(uint16_t* buffer, uint16_t color) {
+    for (uint32_t i = 0; i < K10_TFT_ACTIVE_WIDTH * 8; ++i) {
+        buffer[i] = color;
+    }
+}
+
+// Render one 8-pixel tile row of the "you are playing" splash screen shown
+// while a game is starting.  Draws the game logo centred on a black background
+// with accent-colour bars above, below, and flanking the logo centre.
+static void render_machine_row(uint16_t* tile_buf, uint16_t tile_row, int machine) {
+    memset(tile_buf, 0, K10_TFT_ACTIVE_WIDTH * 8 * sizeof(uint16_t));
+
+    const MenuEntry* entry  = menu_entry_for_machine(machine);
+    const uint16_t   accent = entry ? entry->accent : 0xffff;
+
+    // Solid accent bars at the top and bottom two tile rows.
+    const int last_row = K10_TFT_ACTIVE_HEIGHT / 8 - 1;
+    if (tile_row <= 1 || tile_row >= last_row - 1) {
+        fill_row(tile_buf, accent);
+        return;
+    }
+
+    // Narrower accent bar flanking the logo centre (96 px wide, horizontally centred).
+    constexpr uint32_t bar_start = (K10_TFT_ACTIVE_WIDTH / 2) - 48;
+    constexpr uint32_t bar_end   = (K10_TFT_ACTIVE_WIDTH / 2) + 48;
+    if (tile_row == 4 || tile_row == last_row - 4) {
+        for (uint32_t i = 0; i < K10_TFT_ACTIVE_WIDTH * 8; ++i) {
+            const uint32_t x = i % K10_TFT_ACTIVE_WIDTH;
+            if (x >= bar_start && x < bar_end) {
+                tile_buf[i] = accent;
+            }
+        }
+    }
+
+    // Render the centred game logo.
+    const int logo_idx = logo_idx_for_machine(machine);
+    const int16_t logo_y = static_cast<int16_t>(tile_row * 8 - kLogoTop);
+    if (logo_idx >= 0 && entry && entry->logo && logo_y > -8 && logo_y < kLogoHeight) {
+        render_logo(logo_idx, logo_y, true, tile_buf);
+    }
+}
+
+// ── Strip rendering helper ────────────────────────────────────────────────────
+//
+// Both draw functions share the same DMA strip loop.  This template avoids
+// code duplication without the overhead of a virtual call.
+template<typename RowRenderer>
+static void draw_frame_strips(RowRenderer render_tile_row) {
+    k10_video_begin_frame();
+    for (int strip = 0; strip < K10_TFT_STRIP_COUNT; ++strip) {
+        uint16_t* buf = k10_video_get_draw_buffer();
+        for (int i = 0; i < K10_TFT_STRIP_HEIGHT / 8; ++i) {
+            const int tile_row = strip * (K10_TFT_STRIP_HEIGHT / 8) + i;
+            render_tile_row(buf + K10_TFT_ACTIVE_WIDTH * 8 * i, tile_row);
+        }
+        k10_video_write(buf, K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT);
+    }
+    k10_video_end_frame();
+}
+
+// ── SPI / TFT low-level ───────────────────────────────────────────────────────
 
 void configure_output_gpio(int pin, uint32_t initial_level) {
     gpio_config_t config = {};
@@ -45,56 +360,6 @@ void configure_output_gpio(int pin, uint32_t initial_level) {
 
 void write_gpio(int pin, uint32_t level) {
     gpio_set_level(static_cast<gpio_num_t>(pin), level);
-}
-
-struct MenuEntry {
-    K10Machine machine;
-    const char* name;
-    const uint16_t* logo;
-    uint16_t accent;
-};
-
-const MenuEntry g_menu_entries[] = {
-#ifdef ENABLE_PACMAN
-    {K10_MACHINE_PACMAN, "Pac-Man", pacman_logo, 0x07e0},
-#endif
-#ifdef ENABLE_GALAGA
-    {K10_MACHINE_GALAGA, "Galaga", galaga_logo, 0xf800},
-#endif
-#ifdef ENABLE_DKONG
-    {K10_MACHINE_DKONG, "Donkey Kong", dkong_logo, 0xfd20},
-#endif
-#ifdef ENABLE_FROGGER
-    {K10_MACHINE_FROGGER, "Frogger", frogger_logo, 0x07ff},
-#endif
-#ifdef ENABLE_DIGDUG
-    {K10_MACHINE_DIGDUG, "Dig Dug", digdug_logo, 0xf81f},
-#endif
-#ifdef ENABLE_1942
-    {K10_MACHINE_1942, "1942", _1942_logo, 0xffe0},
-#endif
-};
-
-constexpr size_t kMenuEntryCount = sizeof(g_menu_entries) / sizeof(g_menu_entries[0]);
-
-int normalize_selection(int selection_index) {
-    if (selection_index < 0 || selection_index >= static_cast<int>(kMenuEntryCount)) {
-        return 0;
-    }
-    return selection_index;
-}
-
-const MenuEntry& menu_entry_at(int index) {
-    return g_menu_entries[normalize_selection(index)];
-}
-
-const MenuEntry* menu_entry_for_machine(int machine) {
-    for (size_t i = 0; i < kMenuEntryCount; ++i) {
-        if (g_menu_entries[i].machine == static_cast<K10Machine>(machine)) {
-            return &g_menu_entries[i];
-        }
-    }
-    return nullptr;
 }
 
 spi_device_interface_config_t g_if_cfg = {
@@ -229,7 +494,6 @@ void clear_panel(uint16_t color) {
     write_gpio(K10_TFT_CS, 0);
     set_addr_window(0, 0, K10_TFT_WIDTH, K10_TFT_HEIGHT);
 
-    // Reuse one of the DMA buffers to clear the screen in larger chunks for speed.
     uint16_t* buffer = g_frame_buffers[0];
     if (buffer != nullptr) {
         const uint16_t swapped = static_cast<uint16_t>((color >> 8) | (color << 8));
@@ -241,140 +505,19 @@ void clear_panel(uint16_t color) {
         }
         flush_dma();
     } else {
-        for (uint32_t index = 0; index < static_cast<uint32_t>(K10_TFT_WIDTH) * K10_TFT_HEIGHT; ++index) {
+        for (uint32_t i = 0; i < static_cast<uint32_t>(K10_TFT_WIDTH) * K10_TFT_HEIGHT; ++i) {
             write16(color);
         }
     }
     write_gpio(K10_TFT_CS, 1);
 }
 
-uint16_t greyscale(uint16_t input) {
-    const uint16_t red = (input >> 3) & 31;
-    const uint16_t green = ((input << 3) & 0x38) | ((input >> 13) & 0x07);
-    const uint16_t blue = (input >> 8) & 31;
-    const uint16_t average = static_cast<uint16_t>((2 * red + green + 2 * blue) / 4);
-
-    return static_cast<uint16_t>(((average << 13) & 0xe000) | ((average << 7) & 0x1f00) |
-                                 ((average << 2) & 0x00f8) | ((average >> 3) & 0x0007));
-}
-
-void render_logo(int16_t row, const uint16_t* logo, bool active, uint16_t* buffer) {
-    const uint16_t marker = logo[0];
-    const uint16_t* data = logo + 1;
-
-    uint16_t pixel_index = 0;
-    const uint16_t pixels_to_draw = static_cast<uint16_t>((row <= 96 - 8) ? (K10_TFT_ACTIVE_WIDTH * 8)
-                                                                            : ((96 - row) * K10_TFT_ACTIVE_WIDTH));
-
-    if (row >= 0) {
-        uint16_t color = 0;
-        uint32_t pixel = 0;
-        while (pixel < static_cast<uint32_t>(K10_TFT_ACTIVE_WIDTH * row)) {
-            if (data[0] != marker) {
-                pixel++;
-                data++;
-            } else {
-                pixel += data[1] + 1;
-                color = data[2];
-                data += 3;
-            }
-        }
-
-        if (!active) {
-            color = greyscale(color);
-        }
-        while (pixel_index < ((pixel - K10_TFT_ACTIVE_WIDTH * row < pixels_to_draw)
-                                  ? (pixel - K10_TFT_ACTIVE_WIDTH * row)
-                                  : pixels_to_draw)) {
-            buffer[pixel_index++] = color;
-        }
-    } else {
-        pixel_index = static_cast<uint16_t>(pixel_index - row * K10_TFT_ACTIVE_WIDTH);
-    }
-
-    while (pixel_index < pixels_to_draw) {
-        if (data[0] != marker) {
-            buffer[pixel_index++] = active ? *data++ : greyscale(*data++);
-        } else {
-            uint16_t color = data[2];
-            if (!active) {
-                color = greyscale(color);
-            }
-            for (uint16_t count = 0; count < data[1] + 1 && pixel_index < pixels_to_draw; ++count) {
-                buffer[pixel_index++] = color;
-            }
-            data += 3;
-        }
-    }
-}
-
-void fill_row(uint16_t* buffer, uint16_t color) {
-    for (uint32_t index = 0; index < K10_TFT_ACTIVE_WIDTH * 8; ++index) {
-        buffer[index] = color;
-    }
-}
-
-void render_menu_row(uint16_t* buffer, uint16_t tile_row, int selection_index) {
-    memset(buffer, 0, K10_TFT_ACTIVE_WIDTH * 8 * sizeof(uint16_t));
-
-    const int normalized_selection = normalize_selection(selection_index);
-    const int offset = 96 * ((normalized_selection + static_cast<int>(kMenuEntryCount) - 2) % static_cast<int>(kMenuEntryCount));
-    int logo_index = ((static_cast<int>(tile_row) + offset / 8) / 12) % static_cast<int>(kMenuEntryCount);
-    if (logo_index < 0) {
-        logo_index += static_cast<int>(kMenuEntryCount);
-    }
-
-    int logo_y = (static_cast<int>(tile_row) * 8 + offset) % 96;
-    if (g_menu_entries[logo_index].logo != nullptr) {
-        render_logo(static_cast<int16_t>(logo_y), g_menu_entries[logo_index].logo,
-                    normalized_selection == logo_index, buffer);
-    }
-
-    if (logo_y > (96 - 8)) {
-        logo_index = (logo_index + 1) % static_cast<int>(kMenuEntryCount);
-        logo_y -= 96;
-        if (g_menu_entries[logo_index].logo != nullptr) {
-            render_logo(static_cast<int16_t>(logo_y), g_menu_entries[logo_index].logo,
-                        normalized_selection == logo_index, buffer);
-        }
-    }
-}
-
-void render_machine_row(uint16_t* buffer, uint16_t tile_row, int machine) {
-    memset(buffer, 0, K10_TFT_ACTIVE_WIDTH * 8 * sizeof(uint16_t));
-
-    const MenuEntry* entry = menu_entry_for_machine(machine);
-    const uint16_t accent = entry ? entry->accent : 0xffff;
-    
-    if (tile_row < 2 || tile_row >= (K10_TFT_ACTIVE_HEIGHT / 8) - 2) {
-        fill_row(buffer, accent);
-        return;
-    }
-
-    const uint32_t middle_start = (K10_TFT_ACTIVE_WIDTH / 2) - 48;
-    const uint32_t middle_end = (K10_TFT_ACTIVE_WIDTH / 2) + 48;
-    if (tile_row == 4 || tile_row == (K10_TFT_ACTIVE_HEIGHT / 8) - 5) {
-        for (uint32_t index = 0; index < K10_TFT_ACTIVE_WIDTH * 8; ++index) {
-            const uint32_t x = index % K10_TFT_ACTIVE_WIDTH;
-            if (x >= middle_start && x < middle_end) {
-                buffer[index] = accent;
-            }
-        }
-    }
-
-    const int16_t logo_row = static_cast<int16_t>(tile_row * 8) - kLogoTop;
-    const uint16_t* logo = entry ? entry->logo : nullptr;
-    if (logo != nullptr && logo_row > -8 && logo_row < 96) {
-        render_logo(logo_row, logo, true, buffer);
-    }
-}
-
 }  // namespace
 
+// ── Public API ────────────────────────────────────────────────────────────────
+
 bool k10_video_begin() {
-    if (g_video_ready) {
-        return true;
-    }
+    if (g_video_ready) return true;
 
     configure_output_gpio(K10_TFT_CS, 1);
     configure_output_gpio(K10_TFT_DC, 1);
@@ -401,7 +544,7 @@ bool k10_video_begin() {
     const uint8_t* cursor = kInitCmds;
     while (*cursor != 0x00) {
         const uint8_t command = *cursor++;
-        const uint8_t len = *cursor++;
+        const uint8_t len     = *cursor++;
         if (command == 0xff) {
             k10_delay_ms(len);
             continue;
@@ -410,18 +553,22 @@ bool k10_video_begin() {
         cursor += len;
     }
 
+    g_frame_buffers[0] = static_cast<uint16_t*>(heap_caps_malloc(
+        K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT * sizeof(uint16_t), MALLOC_CAP_DMA));
+    g_frame_buffers[1] = static_cast<uint16_t*>(heap_caps_malloc(
+        K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT * sizeof(uint16_t), MALLOC_CAP_DMA));
+    if (!g_frame_buffers[0] || !g_frame_buffers[1]) {
+        printf("Video: frame buffer allocation failed\n");
+        return false;
+    }
+
     clear_panel(kPanelBackground);
 
     if (!k10_prepare_expander()) {
         printf("Video: expander prepare failed\n");
     }
 
-    g_frame_buffers[0] = static_cast<uint16_t*>(heap_caps_malloc(K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT * sizeof(uint16_t), MALLOC_CAP_DMA));
-    g_frame_buffers[1] = static_cast<uint16_t*>(heap_caps_malloc(K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT * sizeof(uint16_t), MALLOC_CAP_DMA));
-    if (g_frame_buffers[0] == nullptr || g_frame_buffers[1] == nullptr) {
-        printf("Video: frame buffer allocation failed\n");
-        return false;
-    }
+    build_logo_cache();
 
     g_video_ready = true;
     printf("Video: ILI9341 initialized\n");
@@ -429,86 +576,45 @@ bool k10_video_begin() {
 }
 
 void k10_video_begin_frame() {
-    if (!g_video_ready && !k10_video_begin()) {
-        return;
-    }
-
+    if (!g_video_ready && !k10_video_begin()) return;
     flush_dma();
     write_gpio(K10_TFT_CS, 0);
     set_addr_window(K10_TFT_X_OFFSET, K10_TFT_Y_OFFSET, K10_TFT_ACTIVE_WIDTH, K10_TFT_ACTIVE_HEIGHT);
 }
 
 void k10_video_write(const uint16_t* colors, uint32_t len) {
-    if (!g_video_ready) {
-        return;
-    }
+    if (!g_video_ready) return;
 
-    // We use the transaction struct that corresponds to the buffer we are currently writing.
-    // The caller is expected to have gotten this buffer via k10_video_get_draw_buffer(),
-    // which ensures the buffer is not in flight.
-    
     int trans_idx = g_buffer_index;
     memset(&g_transactions[trans_idx], 0, sizeof(spi_transaction_t));
-    g_transactions[trans_idx].length = len * 16;
+    g_transactions[trans_idx].length    = len * 16;
     g_transactions[trans_idx].tx_buffer = colors;
-    
+
     spi_device_queue_trans(g_tft_handle, &g_transactions[trans_idx], portMAX_DELAY);
     g_in_flight_count++;
     g_dma_active = true;
 
-    // Toggle the internal buffer index for the next draw.
     g_buffer_index = static_cast<uint8_t>(1 - g_buffer_index);
 }
 
 void k10_video_end_frame() {
-    if (!g_video_ready) {
-        return;
-    }
-
+    if (!g_video_ready) return;
     flush_dma();
     write_gpio(K10_TFT_CS, 1);
 }
 
 void k10_video_draw_menu_frame(int selection_index) {
-    if (!g_video_ready && !k10_video_begin()) {
-        return;
-    }
-
-    k10_video_begin_frame();
-
-    for (uint16_t strip_row = 0; strip_row < (K10_TFT_ACTIVE_HEIGHT / K10_TFT_STRIP_HEIGHT); ++strip_row) {
-        uint16_t* buffer = k10_video_get_draw_buffer();
-        
-        // Render rows into the strip
-        for (int i = 0; i < (K10_TFT_STRIP_HEIGHT / 8); ++i) {
-            render_menu_row(buffer + K10_TFT_ACTIVE_WIDTH * 8 * i, strip_row * (K10_TFT_STRIP_HEIGHT / 8) + i, selection_index);
-        }
-        
-        k10_video_write(buffer, K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT);
-    }
-
-    k10_video_end_frame();
+    if (!g_video_ready && !k10_video_begin()) return;
+    draw_frame_strips([selection_index](uint16_t* buf, int tile_row) {
+        render_menu_row(buf, tile_row, selection_index);
+    });
 }
 
 void k10_video_draw_machine_frame(int machine) {
-    if (!g_video_ready && !k10_video_begin()) {
-        return;
-    }
-
-    k10_video_begin_frame();
-
-    for (uint16_t strip_row = 0; strip_row < (K10_TFT_ACTIVE_HEIGHT / K10_TFT_STRIP_HEIGHT); ++strip_row) {
-        uint16_t* buffer = k10_video_get_draw_buffer();
-        
-        // Render rows into the strip
-        for (int i = 0; i < (K10_TFT_STRIP_HEIGHT / 8); ++i) {
-            render_machine_row(buffer + K10_TFT_ACTIVE_WIDTH * 8 * i, strip_row * (K10_TFT_STRIP_HEIGHT / 8) + i, machine);
-        }
-        
-        k10_video_write(buffer, K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT);
-    }
-
-    k10_video_end_frame();
+    if (!g_video_ready && !k10_video_begin()) return;
+    draw_frame_strips([machine](uint16_t* buf, int tile_row) {
+        render_machine_row(buf, static_cast<uint16_t>(tile_row), machine);
+    });
 }
 
 uint16_t* k10_video_get_draw_buffer() {
@@ -527,22 +633,18 @@ int k10_video_menu_count() {
 int k10_video_wrap_menu_selection(int selection_index, int delta) {
     if (kMenuEntryCount == 0) return 0;
     const int count = static_cast<int>(kMenuEntryCount);
-    int wrapped = selection_index + delta;
-    while (wrapped < 0) {
-        wrapped += count;
-    }
-    while (wrapped >= count) {
-        wrapped -= count;
-    }
-    return wrapped;
+    // The double-modulo handles negative delta without a loop.
+    return ((selection_index + delta) % count + count) % count;
 }
 
 const char* k10_video_menu_name(int selection_index) {
     if (kMenuEntryCount == 0) return "Empty";
-    return menu_entry_at(selection_index).name;
+    const int idx = normalize_selection(selection_index);
+    return g_menu_entries[idx].name;
 }
 
 K10Machine k10_video_menu_machine(int selection_index) {
     if (kMenuEntryCount == 0) return K10_MACHINE_MENU;
-    return menu_entry_at(selection_index).machine;
+    const int idx = normalize_selection(selection_index);
+    return g_menu_entries[idx].machine;
 }

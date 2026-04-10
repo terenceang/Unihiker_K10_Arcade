@@ -16,6 +16,7 @@
 #include <freertos/task.h>
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
+#include <esp_random.h>
 
 #include "k10_idf.h"
 #include "k10_hardware.h"
@@ -95,6 +96,8 @@ extern unsigned char digdug_video_latch;
 #endif
 
 #ifndef SINGLE_MACHINE
+
+signed char machine = MCH_MENU;
 
 // if galaga is installed, then use it as default in menu
 #ifdef ENABLE_GALAGA

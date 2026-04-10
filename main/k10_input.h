@@ -10,6 +10,7 @@
 // - K10_BUTTON_START: Key A + Key B combo
 // - K10_BUTTON_EXTRA: BOOT button (K1) - (Not currently mapped in hardware layer)
 // Directions (UP/DOWN/LEFT/RIGHT) have no physical mapping on the K10 board itself.
+
 enum : uint8_t {
     K10_BUTTON_LEFT = 0x01,
     K10_BUTTON_RIGHT = 0x02,

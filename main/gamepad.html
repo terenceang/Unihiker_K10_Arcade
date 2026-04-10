@@ -1,74 +1,274 @@
-<!-- gamepad.html: Simple virtual gamepad for K10 WiFi receiver -->
+<!-- gamepad.html: SNES-style virtual gamepad for K10 WiFi receiver -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>K10 WiFi Gamepad</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
   <style>
-    body { background: #111; color: #fff; font-family: sans-serif; text-align: center; }
-    .dpad, .buttons { display: inline-block; margin: 2em; }
-    .dpad button, .buttons button { width: 60px; height: 60px; margin: 5px; font-size: 1.5em; border-radius: 50%; border: none; background: #333; color: #fff; }
-    .dpad button:active, .buttons button:active { background: #0af; }
-    .sticks { margin: 2em; }
-    input[type=range] { width: 120px; }
+    body { 
+      background: #111; 
+      color: #fff; 
+      font-family: sans-serif; 
+      margin: 0; 
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Rotation container */
+    .wrapper {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+
+    @media screen and (orientation: portrait) {
+      .wrapper {
+        width: 100vh;
+        height: 100vw;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(90deg);
+      }
+    }
+
+    .controller {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      width: 95%;
+      max-width: 800px;
+      height: 85%;
+      max-height: 400px;
+      background: #333;
+      border-radius: 50px;
+      padding: 20px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      border: 4px solid #444;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    /* D-PAD (Left) */
+    .left-section {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+    .dpad {
+      display: grid;
+      grid-template-areas: 
+        ". up ."
+        "left center right"
+        ". down .";
+      gap: 2px;
+    }
+    .dpad button {
+      width: 65px;
+      height: 65px;
+      background: #222;
+      border: 2px solid #444;
+      color: #fff;
+      font-size: 1.5em;
+      border-radius: 8px;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #up    { grid-area: up; border-radius: 12px 12px 0 0; }
+    #down  { grid-area: down; border-radius: 0 0 12px 12px; }
+    #left  { grid-area: left; border-radius: 12px 0 0 12px; }
+    #right { grid-area: right; border-radius: 0 12px 12px 0; }
+    #center { grid-area: center; border-radius: 0; background: #222; }
+
+    /* START / SELECT (Center) */
+    .center-section {
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+      padding: 0 20px;
+    }
+    .center-section button {
+      width: 90px;
+      height: 35px;
+      background: #555;
+      border: none;
+      border-radius: 20px;
+      color: #fff;
+      font-size: 0.8em;
+      font-weight: bold;
+      transform: rotate(-15deg);
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* BUTTONS (Right) */
+    .right-section {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+    .action-buttons {
+      position: relative;
+      width: 180px;
+      height: 180px;
+    }
+    .action-buttons button {
+      position: absolute;
+      width: 85px;
+      height: 85px;
+      border-radius: 50%;
+      border: none;
+      font-size: 1.8em;
+      font-weight: bold;
+      color: #fff;
+      box-shadow: 2px 4px 0 rgba(0,0,0,0.3);
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #a { background: #e74c3c; bottom: 50px; right: 0; } /* Red */
+    #b { background: #f1c40f; bottom: 0; left: 50px; } /* Yellow */
+
+    button:active {
+      filter: brightness(1.5);
+      transform: scale(0.95);
+    }
+    .center-section button:active {
+        transform: rotate(-15deg) scale(0.95);
+    }
+
+    h1 {
+      font-size: 1.2em;
+      color: #666;
+      margin: 0 0 10px 0;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    /* Hide sticks */
+    .sticks { display: none; }
   </style>
 </head>
 <body>
-  <h1>K10 WiFi Gamepad</h1>
-  <div class="dpad">
-    <div><button id="up">▲</button></div>
-    <div>
-      <button id="left">◀</button>
-      <button id="center">●</button>
-      <button id="right">▶</button>
+  <div class="wrapper">
+    <h1>K10 Arcade System</h1>
+    <div class="controller">
+      <!-- D-PAD -->
+      <div class="left-section">
+        <div class="dpad">
+          <button id="up">▲</button>
+          <button id="left">◀</button>
+          <button id="center">●</button>
+          <button id="right">▶</button>
+          <button id="down">▼</button>
+        </div>
+      </div>
+
+      <!-- START / COIN -->
+      <div class="center-section">
+        <button id="coin">COIN</button>
+        <button id="start">START</button>
+      </div>
+
+      <!-- ACTION BUTTONS -->
+      <div class="right-section">
+        <div class="action-buttons">
+          <button id="a">A</button>
+          <button id="b">B</button>
+        </div>
+      </div>
     </div>
-    <div><button id="down">▼</button></div>
+
+    <div class="sticks">
+      <input type="range" id="lx" min="-128" max="127" value="0">
+      <input type="range" id="ly" min="-128" max="127" value="0">
+      <input type="range" id="rx" min="-128" max="127" value="0">
+      <input type="range" id="ry" min="-128" max="127" value="0">
+    </div>
   </div>
-  <div class="buttons">
-    <button id="a">A</button>
-    <button id="b">B</button>
-    <button id="start">Start</button>
-    <button id="coin">Coin</button>
-  </div>
-  <div class="sticks">
-    <div>LX: <input type="range" id="lx" min="-128" max="127" value="0"></div>
-    <div>LY: <input type="range" id="ly" min="-128" max="127" value="0"></div>
-    <div>RX: <input type="range" id="rx" min="-128" max="127" value="0"></div>
-    <div>RY: <input type="range" id="ry" min="-128" max="127" value="0"></div>
-  </div>
+
   <script>
-    // Button/hat bitmasks (must match k10_input.h)
-    // A = FIRE (0x10), B = COIN (0x40), Start = START (0x20), Coin = EXTRA (0x80)
-    const BTN_A = 0x10, BTN_B = 0x40, BTN_START = 0x20, BTN_COIN = 0x80;
+    // Button/hat bitmasks - AUTOMATICALLY INJECTED FROM k10_input.h
+    /* BITMASK_PLACEHOLDER */
+    const BTN_A = K10_BUTTON_FIRE, BTN_B = K10_BUTTON_FIRE, BTN_START = K10_BUTTON_START, BTN_COIN = K10_BUTTON_COIN;
+
     let buttons = 0, hat = 8, lx = 0, ly = 0, rx = 0, ry = 0;
-    function send() {
+    let lastSent = "";
+
+    function send(force = false) {
+      const data = new Uint8Array(7);
+      data[0] = buttons & 0xFF;
+      data[1] = (buttons >> 8) & 0xFF;
+      data[2] = hat;
+      data[3] = lx;
+      data[4] = ly;
+      data[5] = rx;
+      data[6] = ry;
+
+      const payload = data.join(',');
+      if (!force && payload === lastSent) return;
+      lastSent = payload;
+      
       fetch('/gamepad', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ buttons, hat, lx, ly, rx, ry })
-      });
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: data
+      }).catch(err => console.error("Send error:", err));
     }
-    // D-pad: only send on press
-    document.getElementById('up').ontouchstart = () => { hat = 0; send(); };
-    document.getElementById('down').ontouchstart = () => { hat = 4; send(); };
-    document.getElementById('left').ontouchstart = () => { hat = 6; send(); };
-    document.getElementById('right').ontouchstart = () => { hat = 2; send(); };
-    document.getElementById('center').ontouchstart = () => { hat = 8; send(); };
-    document.getElementById('up').ontouchend = document.getElementById('down').ontouchend =
-    document.getElementById('left').ontouchend = document.getElementById('right').ontouchend =
-    document.getElementById('center').ontouchend = () => { hat = 8; };
-    // Buttons: only send on press
-    function setBtn(id, mask) {
-      const btn = document.getElementById(id);
-      btn.ontouchstart = () => { buttons |= mask; send(); };
-      btn.ontouchend = () => { buttons &= ~mask; };
+
+    function bind(id, onPress, onRelease) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      
+      const start = (e) => { e.preventDefault(); onPress(); send(); };
+      const end = (e) => { e.preventDefault(); onRelease(); send(); };
+      
+      el.addEventListener('touchstart', start, {passive: false});
+      el.addEventListener('touchend', end, {passive: false});
+      el.addEventListener('mousedown', start);
+      el.addEventListener('mouseup', end);
+      el.addEventListener('mouseleave', end);
     }
-    setBtn('a', BTN_A); setBtn('b', BTN_B); setBtn('start', BTN_START); setBtn('coin', BTN_COIN);
-    // Sticks: do not send on move
+
+    // D-pad
+    bind('up',    () => { hat = 0; }, () => { hat = 8; });
+    bind('down',  () => { hat = 4; }, () => { hat = 8; });
+    bind('left',  () => { hat = 6; }, () => { hat = 8; });
+    bind('right', () => { hat = 2; }, () => { hat = 8; });
+    bind('center',() => { hat = 8; }, () => { hat = 8; });
+
+    // Buttons
+    bind('a',     () => { buttons |= BTN_A; },     () => { buttons &= ~BTN_A; });
+    bind('b',     () => { buttons |= BTN_B; },     () => { buttons &= ~BTN_B; });
+    bind('start', () => { buttons |= BTN_START; }, () => { buttons &= ~BTN_START; });
+    bind('coin',  () => { buttons |= BTN_COIN; },  () => { buttons &= ~BTN_COIN; });
+
+    // Sticks
     ['lx','ly','rx','ry'].forEach(axis => {
-      document.getElementById(axis).oninput = e => { window[axis] = parseInt(e.target.value); };
+      const el = document.getElementById(axis);
+      if (el) el.oninput = e => { 
+        window[axis] = parseInt(e.target.value); 
+        send();
+      };
     });
+
+    window.oncontextmenu = function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
+    };
   </script>
 </body>
 </html>

@@ -76,10 +76,25 @@ static void k10_main_task(void* parameter) {
         if (wifi_state.ly < -40) input_state |= K10_BUTTON_UP;
         if (wifi_state.ly > 40)  input_state |= K10_BUTTON_DOWN;
 
-        // Map Buttons (0=A, 1=B, 2=Start, 3=Coin)
-        if (wifi_state.buttons & 0x01) input_state |= K10_BUTTON_FIRE; // A -> Fire
-        if (wifi_state.buttons & 0x02) input_state |= K10_BUTTON_COIN; // B -> Coin
-        if (wifi_state.buttons & 0x04) input_state |= K10_BUTTON_START; // Start
+        // Map POV Hat to Directions using a lookup table
+        static const uint8_t hat_map[] = {
+            K10_BUTTON_UP,                                // 0: N
+            K10_BUTTON_UP | K10_BUTTON_RIGHT,             // 1: NE
+            K10_BUTTON_RIGHT,                             // 2: E
+            K10_BUTTON_DOWN | K10_BUTTON_RIGHT,           // 3: SE
+            K10_BUTTON_DOWN,                              // 4: S
+            K10_BUTTON_DOWN | K10_BUTTON_LEFT,            // 5: SW
+            K10_BUTTON_LEFT,                              // 6: W
+            K10_BUTTON_UP | K10_BUTTON_LEFT,              // 7: NW
+            0                                             // 8: Center
+        };
+        if (wifi_state.hat < 9) {
+            input_state |= hat_map[wifi_state.hat];
+        }
+
+        // Map Buttons (A=Fire, B=Coin, Start=Start, Coin=Extra)
+        // wifi_state.buttons bitmasks already match K10_BUTTON_... enums in gamepad.html
+        input_state |= (uint8_t)(wifi_state.buttons & 0xFF);
 
         switch (k10_state_handle_input(input_state, last_input_state)) {
             case K10_STATE_EVENT_MENU_CHANGED:

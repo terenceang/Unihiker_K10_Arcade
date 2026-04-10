@@ -18,27 +18,37 @@
 #include "esp_netif.h"
 #include "esp_http_server.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+
 static const char *TAG = "K10_WIFI";
 
 static k10_gamepad_state_t g_state = {0};
+static SemaphoreHandle_t g_mutex = NULL;
 
 // HTTP POST handler for /gamepad
 static esp_err_t gamepad_post_handler(httpd_req_t *req) {
-    char buf[128];
-    int ret = httpd_req_recv(req, buf, sizeof(buf)-1);
+    if (req->content_len < 7) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Too short");
+        return ESP_FAIL;
+    }
+
+    uint8_t buf[8];
+    int ret = httpd_req_recv(req, (char*)buf, 7);
     if (ret <= 0) return ESP_FAIL;
-    buf[ret] = 0;
-    // Very simple JSON parse (not robust, demo only)
-    int buttons=0, hat=0, lx=0, ly=0, rx=0, ry=0;
-    sscanf(buf, "{\"buttons\":%d,\"hat\":%d,\"lx\":%d,\"ly\":%d,\"rx\":%d,\"ry\":%d}",
-        &buttons, &hat, &lx, &ly, &rx, &ry);
-    g_state.buttons = buttons;
-    g_state.hat = hat;
-    g_state.lx = lx;
-    g_state.ly = ly;
-    g_state.rx = rx;
-    g_state.ry = ry;
-    ESP_LOGI(TAG, "Gamepad: btn=%04x hat=%d lx=%d ly=%d rx=%d ry=%d", buttons, hat, lx, ly, rx, ry);
+
+    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        // Binary format: [btn_lo, btn_hi, hat, lx, ly, rx, ry]
+        g_state.buttons = buf[0] | (buf[1] << 8);
+        g_state.hat     = buf[2];
+        g_state.lx      = (int8_t)buf[3];
+        g_state.ly      = (int8_t)buf[4];
+        g_state.rx      = (int8_t)buf[5];
+        g_state.ry      = (int8_t)buf[6];
+        g_state.connected = true;
+        xSemaphoreGive(g_mutex);
+    }
+
     httpd_resp_sendstr(req, "OK");
     return ESP_OK;
 }
@@ -66,6 +76,9 @@ static esp_err_t captive_gamepad_handler(httpd_req_t *req) {
 
 // Start WiFi AP and HTTP server
 void k10_wifi_gamepad_begin(void) {
+    if (g_mutex == NULL) {
+        g_mutex = xSemaphoreCreateMutex();
+    }
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -140,6 +153,9 @@ void k10_wifi_gamepad_begin(void) {
 }
 
 void k10_wifi_gamepad_get_state(k10_gamepad_state_t *state) {
-    if (!state) return;
-    memcpy(state, &g_state, sizeof(k10_gamepad_state_t));
+    if (!state || !g_mutex) return;
+    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        memcpy(state, &g_state, sizeof(k10_gamepad_state_t));
+        xSemaphoreGive(g_mutex);
+    }
 }

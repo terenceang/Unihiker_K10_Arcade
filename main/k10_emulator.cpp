@@ -22,6 +22,7 @@ extern unsigned char* memory;
 extern char game_started;
 extern unsigned char soundregs[32];
 extern unsigned char starcontrol;
+extern signed char machine;
 }
 
 struct sprite_S {
@@ -44,6 +45,9 @@ unsigned short* frame_buffer = nullptr;
 #define IO_EMULATION
 #include "arcade_core/tileaddr.h"
 #include "arcade_core/galaga.h"
+#ifdef ENABLE_PACMAN
+#include "arcade_core/pacman.h"
+#endif
 
 namespace {
 
@@ -78,37 +82,75 @@ int16_t clamp_pcm16(int sample) {
 }
 
 void render_line(short strip_row) {
-    // Clear the entire 16-row strip first.
     memset(frame_buffer, 0, kFrameBytes);
+    unsigned short* const original_buffer = frame_buffer;
 
-    // Render two 8-pixel high tile rows into the 16-pixel strip
-    unsigned short* original_buffer = frame_buffer;
+    const short row0 = strip_row * 2;
+    const short row1 = strip_row * 2 + 1;
 
-    // First row
-    galaga_render_row(strip_row * 2);
-
-    // Second row (offset buffer by K10_TFT_ACTIVE_WIDTH * 8 pixels)
-    frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
-    galaga_render_row(strip_row * 2 + 1);
+#ifdef ENABLE_PACMAN
+    if (machine == K10_MACHINE_PACMAN) {
+        pacman_render_row(row0);
+        frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
+        pacman_render_row(row1);
+    } else
+#endif
+    {
+        galaga_render_row(row0);
+        frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
+        galaga_render_row(row1);
+    }
 
     frame_buffer = original_buffer;
 }
 
-void audio_namco_waveregs_parse_cpp() {
-    for (char channel = 0; channel < 3; ++channel) {
-        snd_volume[channel] = soundregs[channel * 5 + 0x15];
+#ifdef ENABLE_GALAGA
+void audio_galaga_waveregs_parse() {
+    for (int ch = 0; ch < 3; ++ch) {
+        snd_volume[ch] = soundregs[ch * 5 + 0x15];
+        if (!snd_volume[ch]) continue;
 
-        if (!snd_volume[channel]) {
-            continue;
-        }
-
-        snd_freq[channel] = (channel == 0) ? soundregs[0x10] : 0;
-        snd_freq[channel] += soundregs[channel * 5 + 0x11] << 4;
-        snd_freq[channel] += soundregs[channel * 5 + 0x12] << 8;
-        snd_freq[channel] += soundregs[channel * 5 + 0x13] << 12;
-        snd_freq[channel] += soundregs[channel * 5 + 0x14] << 16;
-        snd_wave[channel] = galaga_wavetable[soundregs[channel * 5 + 0x05] & 0x07];
+        snd_freq[ch]  = (ch == 0) ? soundregs[0x10] : 0;
+        snd_freq[ch] += soundregs[ch * 5 + 0x11] << 4;
+        snd_freq[ch] += soundregs[ch * 5 + 0x12] << 8;
+        snd_freq[ch] += soundregs[ch * 5 + 0x13] << 12;
+        snd_freq[ch] += soundregs[ch * 5 + 0x14] << 16;
+        snd_wave[ch]  = galaga_wavetable[soundregs[ch * 5 + 0x05] & 0x07];
     }
+}
+#endif
+
+#ifdef ENABLE_PACMAN
+// Pac-Man Namco WSG register layout (each reg holds one 4-bit nibble):
+//   Voice ch: regs [ch*5 .. ch*5+4] = 20-bit freq accumulator (low..high nibble)
+//             reg  [ch*5+5]          = volume (bits 3:0)
+//   Waveform: upper 3 bits of the high-freq nibble (soundregs[ch*5+4] >> 1)
+void audio_pacman_waveregs_parse() {
+    for (int ch = 0; ch < 3; ++ch) {
+        const int base = ch * 5;
+        snd_volume[ch] = soundregs[base + 5] & 0x0f;
+        if (!snd_volume[ch]) continue;
+
+        snd_freq[ch]  = soundregs[base + 0];
+        snd_freq[ch] |= soundregs[base + 1] << 4;
+        snd_freq[ch] |= soundregs[base + 2] << 8;
+        snd_freq[ch] |= soundregs[base + 3] << 12;
+        snd_freq[ch] |= (soundregs[base + 4] & 0x01) << 16;
+        snd_freq[ch] <<= 4;  // scale to match synthesis step size
+
+        const int wave_sel = (soundregs[base + 4] >> 1) & 0x07;
+        snd_wave[ch] = pacman_wavetable[wave_sel];
+    }
+}
+#endif
+
+void audio_namco_waveregs_parse_cpp() {
+#ifdef ENABLE_PACMAN
+    if (machine == K10_MACHINE_PACMAN) { audio_pacman_waveregs_parse(); return; }
+#endif
+#ifdef ENABLE_GALAGA
+    audio_galaga_waveregs_parse();
+#endif
 }
 
 void snd_render_buffer_cpp() {
@@ -174,7 +216,14 @@ void update_screen_cpp() {
         last_fps_time = now;
     }
 
-    galaga_prepare_frame();
+#ifdef ENABLE_PACMAN
+    if (machine == K10_MACHINE_PACMAN) {
+        pacman_prepare_frame();
+    } else
+#endif
+    {
+        galaga_prepare_frame();
+    }
 
     k10_video_begin_frame();
     for (int strip_row = 0; strip_row < K10_TFT_STRIP_COUNT; ++strip_row) {
@@ -210,7 +259,11 @@ void update_screen_cpp() {
         next_frame_deadline_us += kFramePeriodUs;
     }
 
-    stars_scroll_y += 2 * star_speeds[starcontrol & 7];
+#ifdef ENABLE_GALAGA
+    if (machine == K10_MACHINE_GALAGA) {
+        stars_scroll_y += 2 * star_speeds[starcontrol & 7];
+    }
+#endif
 }
 
 void emulation_task(void* parameter) {
@@ -332,6 +385,7 @@ bool k10_emulator_start(K10Machine machine) {
     ulTaskNotifyTake(pdTRUE, 0);
 
     prepare_emulation();
+    ::machine = (signed char)machine;
 
     const BaseType_t task_ok = xTaskCreatePinnedToCore(emulation_task, "emulation task", kEmulationTaskStackWords,
                                                        nullptr, kEmulationTaskPriority, &g_emulation_task,
