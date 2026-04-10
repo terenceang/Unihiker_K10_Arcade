@@ -165,7 +165,7 @@ static inline void _1942_WrZ80(unsigned short Addr, unsigned char Value) {
       }
       
       if(Addr == 0xc805) {
-	_1942_palette = Value;
+	_1942_palette = Value & 0x0f; // hardware only uses lower 4 bits; clamp to 0-15
 	return;
       }
       

@@ -170,9 +170,10 @@ K10StateEvent k10_state_handle_input(uint8_t input_state, uint8_t last_input_sta
             return K10_STATE_EVENT_MENU_CHANGED;
         }
 
-        // Launch selected game
+        // Launch selected game — FIRE, START, or COIN (arcade-style "insert coin to play")
         if (pressed(input_state, last_input_state, K10_BUTTON_FIRE) ||
-            pressed(input_state, last_input_state, K10_BUTTON_START)) {
+            pressed(input_state, last_input_state, K10_BUTTON_START) ||
+            pressed(input_state, last_input_state, K10_BUTTON_COIN)) {
             g_idle_active = false;
             return launch_current_selection();
         }

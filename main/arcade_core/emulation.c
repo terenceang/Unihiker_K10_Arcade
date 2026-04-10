@@ -591,7 +591,24 @@ void prepare_emulation(void) {
 
 #ifdef ENABLE_DKONG
   i8048_reset(&cpu_8048);
-#endif       
+#endif
+
+#if defined(ENABLE_GALAGA) || defined(ENABLE_DIGDUG) || defined(ENABLE_1942)
+  // sub_cpu_reset starts at 1 (secondary CPU held in reset) on every game start
+  sub_cpu_reset = 1;
+#endif
+
+#ifdef ENABLE_1942
+  // Reset 1942-specific hardware registers to their power-on state.
+  // These are global variables that persist between game sessions, so they
+  // must be explicitly re-initialised here.
+  _1942_bank        = 0;
+  _1942_palette     = 0;
+  _1942_scroll      = 0;
+  _1942_sound_latch = 0;
+  _1942_ay_addr[0]  = 0;
+  _1942_ay_addr[1]  = 0;
+#endif
 }
 
 void emulate_frame(void) {
