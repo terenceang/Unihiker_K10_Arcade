@@ -411,6 +411,14 @@ extern "C" void galaga_trigger_sound_explosion(void) {
     }
 }
 
+#ifdef ENABLE_DKONG
+extern "C" void dkong_trigger_sound(char /*sound_index*/) {
+    // DKONG sound is triggered by the emulation core, but the actual audio
+    // playback path is handled elsewhere. Keep this symbol defined so the
+    // DKONG Z80 emulation can link correctly when DKONG support is enabled.
+}
+#endif
+
 extern "C" unsigned char buttons_get(void) {
     return g_cached_buttons;
 }
