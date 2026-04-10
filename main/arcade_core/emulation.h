@@ -21,27 +21,18 @@ extern unsigned char dkong_audio_rptr, dkong_audio_wptr;
 #define BUTTON_EXTRA 0x80
 
 #ifndef SINGLE_MACHINE
+// These values are pinned to match K10Machine in k10_state.h so that
+// the 'machine' global (set from K10Machine) correctly matches MCH_* in
+// switch() dispatches regardless of which games are compiled in.
 enum {
-      MCH_MENU = 0,
-#ifdef ENABLE_PACMAN
-      MCH_PACMAN,
-#endif
-#ifdef ENABLE_GALAGA
-      MCH_GALAGA,
-#endif
-#ifdef ENABLE_DKONG
-      MCH_DKONG,
-#endif
-#ifdef ENABLE_FROGGER
-      MCH_FROGGER,
-#endif
-#ifdef ENABLE_DIGDUG
-      MCH_DIGDUG,
-#endif
-#ifdef ENABLE_1942
-      MCH_1942,
-#endif
-      MCH_LAST
+      MCH_MENU    = 0,
+      MCH_PACMAN  = 1,
+      MCH_GALAGA  = 2,
+      MCH_DKONG   = 3,
+      MCH_FROGGER = 4,
+      MCH_DIGDUG  = 5,
+      MCH_1942    = 6,
+      MCH_LAST    = 7,
 };
 
 #define MACHINES  (MCH_LAST-1)

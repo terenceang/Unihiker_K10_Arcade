@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -60,11 +61,10 @@ static void k10_main_task(void* parameter) {
         k10_gamepad_state_t wifi_state;
         k10_wifi_gamepad_get_state(&wifi_state);
 
-        // WiFi status — printed once per second
-        static uint32_t last_wifi_log_ms = 0;
-        uint32_t now_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
-        if (now_ms - last_wifi_log_ms >= 1000) {
-            last_wifi_log_ms = now_ms;
+        // WiFi status — printed only when state changes
+        static k10_gamepad_state_t last_wifi_state = {};
+        if (memcmp(&wifi_state, &last_wifi_state, sizeof(wifi_state)) != 0) {
+            last_wifi_state = wifi_state;
             ESP_LOGI(TAG, "[WiFi] Gamepad | Btns:%04x Hat:%d LX:%4d LY:%4d RX:%4d RY:%4d",
                      wifi_state.buttons, wifi_state.hat,
                      wifi_state.lx, wifi_state.ly, wifi_state.rx, wifi_state.ry);

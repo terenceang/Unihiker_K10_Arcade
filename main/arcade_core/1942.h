@@ -200,10 +200,10 @@ static inline void _1942_run_frame(void) {
       
   for(char f=0;f<4;f++) {
     for(int i=0;i<INST_PER_FRAME/3;i++) {
-      current_cpu = 0; 
+      current_cpu = 0; current_rom_base = _1942_rom_cpu1;
       StepZ80(&cpu[0]); StepZ80(&cpu[0]); StepZ80(&cpu[0]); StepZ80(&cpu[0]);
       if(!sub_cpu_reset) {
-        current_cpu = 1;
+        current_cpu = 1; current_rom_base = _1942_rom_cpu2;
         StepZ80(&cpu[1]); StepZ80(&cpu[1]); StepZ80(&cpu[1]);
       }
     }

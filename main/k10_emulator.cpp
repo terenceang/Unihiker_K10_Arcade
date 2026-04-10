@@ -48,6 +48,9 @@ unsigned short* frame_buffer = nullptr;
 #ifdef ENABLE_PACMAN
 #include "arcade_core/pacman.h"
 #endif
+#ifdef ENABLE_1942
+#include "arcade_core/1942.h"
+#endif
 
 namespace {
 
@@ -75,6 +78,15 @@ unsigned char snd_volume[3] = {0, 0, 0};
 
 int16_t* snd_buffer = nullptr;
 
+#ifdef ENABLE_1942
+int ay_period[2][4]    = {{0,0,0,0},{0,0,0,0}};
+int ay_volume[2][3]    = {{0,0,0},{0,0,0}};
+int ay_enable[2][3]    = {{0,0,0},{0,0,0}};
+int audio_cnt[2][4]    = {{0,0,0,0},{0,0,0,0}};
+int audio_toggle[2][4] = {{1,1,1,1},{1,1,1,1}};
+unsigned long ay_noise_rng[2] = {1, 1};
+#endif
+
 int16_t clamp_pcm16(int sample) {
     if (sample > 32767) return 32767;
     if (sample < -32768) return -32768;
@@ -93,6 +105,13 @@ void render_line(short strip_row) {
         pacman_render_row(row0);
         frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
         pacman_render_row(row1);
+    } else
+#endif
+#ifdef ENABLE_1942
+    if (machine == K10_MACHINE_1942) {
+        _1942_render_row(row0);
+        frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
+        _1942_render_row(row1);
     } else
 #endif
     {
@@ -143,6 +162,20 @@ void audio_namco_waveregs_parse_cpp() {
 #ifdef ENABLE_PACMAN
     if (machine == K10_MACHINE_PACMAN) { audio_pacman_waveregs_parse(); return; }
 #endif
+#ifdef ENABLE_1942
+    if (machine == K10_MACHINE_1942) {
+        for (int ay = 0; ay < 2; ++ay) {
+            const int ay_off = 16 * ay;
+            for (int c = 0; c < 3; ++c) {
+                ay_period[ay][c] = soundregs[ay_off + 2*c] + 256 * (soundregs[ay_off + 2*c + 1] & 15);
+                ay_enable[ay][c] = (((soundregs[ay_off + 7] >> c) & 1) | ((soundregs[ay_off + 7] >> (c+2)) & 2)) ^ 3;
+                ay_volume[ay][c] = soundregs[ay_off + 8 + c] & 0x0f;
+            }
+            ay_period[ay][3] = soundregs[ay_off + 6] & 0x1f;
+        }
+        return;
+    }
+#endif
 #ifdef ENABLE_GALAGA
     audio_galaga_waveregs_parse();
 #endif
@@ -150,7 +183,46 @@ void audio_namco_waveregs_parse_cpp() {
 
 void snd_render_buffer_cpp() {
     const int32_t vol_scale = (64 * AUDIO_VOLUME) / 100;
-    
+
+#ifdef ENABLE_1942
+    if (machine == K10_MACHINE_1942) {
+        constexpr int AY_INC = 8;
+        constexpr int AY_VOL = 4;
+        for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
+            int32_t value = 0;
+            for (int ay = 0; ay < 2; ++ay) {
+                if (ay_period[ay][3]) {
+                    audio_cnt[ay][3] += AY_INC;
+                    if (audio_cnt[ay][3] > ay_period[ay][3]) {
+                        audio_cnt[ay][3] -= ay_period[ay][3];
+                        ay_noise_rng[ay] ^= (((ay_noise_rng[ay] & 1) ^ ((ay_noise_rng[ay] >> 3) & 1)) << 17);
+                        ay_noise_rng[ay] >>= 1;
+                    }
+                }
+                for (int c = 0; c < 3; ++c) {
+                    if (ay_period[ay][c] && ay_volume[ay][c] && ay_enable[ay][c]) {
+                        int bit = 1;
+                        if (ay_enable[ay][c] & 1) bit &= (audio_toggle[ay][c] > 0) ? 1 : 0;
+                        if (ay_enable[ay][c] & 2) bit &= (int)(ay_noise_rng[ay] & 1);
+                        if (bit == 0) bit = -1;
+                        value += AY_VOL * bit * ay_volume[ay][c];
+                        audio_cnt[ay][c] += AY_INC;
+                        if (audio_cnt[ay][c] > ay_period[ay][c]) {
+                            audio_cnt[ay][c] -= ay_period[ay][c];
+                            audio_toggle[ay][c] = -audio_toggle[ay][c];
+                        }
+                    }
+                }
+            }
+            value *= vol_scale;
+            const int16_t sample = clamp_pcm16(value);
+            snd_buffer[2 * index] = sample;
+            snd_buffer[2 * index + 1] = sample;
+        }
+        return;
+    }
+#endif
+
     for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
         int32_t value = 0;
 
@@ -214,6 +286,11 @@ void update_screen_cpp() {
 #ifdef ENABLE_PACMAN
     if (machine == K10_MACHINE_PACMAN) {
         pacman_prepare_frame();
+    } else
+#endif
+#ifdef ENABLE_1942
+    if (machine == K10_MACHINE_1942) {
+        _1942_prepare_frame();
     } else
 #endif
     {
@@ -293,6 +370,15 @@ void reset_audio_state() {
     }
     snd_boom_cnt = 0;
     snd_boom_ptr = nullptr;
+#ifdef ENABLE_1942
+    memset(ay_period,  0, sizeof(ay_period));
+    memset(ay_volume,  0, sizeof(ay_volume));
+    memset(ay_enable,  0, sizeof(ay_enable));
+    memset(audio_cnt,  0, sizeof(audio_cnt));
+    for (int i = 0; i < 2; ++i)
+        for (int j = 0; j < 4; ++j) audio_toggle[i][j] = 1;
+    ay_noise_rng[0] = ay_noise_rng[1] = 1;
+#endif
 }
 
 void teardown_emulation_task() {
@@ -387,6 +473,14 @@ bool k10_emulator_start(K10Machine machine) {
                                                        kEmulationTaskCore);
     if (task_ok != pdPASS) {
         teardown_emulation_task();
+        return false;
+    }
+
+    // Pre-seed one notification so the emulation task's first ulTaskNotifyTake
+    // (in emulate_frame) returns immediately without deadlocking, even for games
+    // like 1942 that set game_started=1 on the very first frame before the
+    // present task has had a chance to send any notifications back.
+    xTaskNotifyGive(g_emulation_task);
         return false;
     }
 
