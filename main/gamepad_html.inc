@@ -209,7 +209,7 @@
 "    const K10_BUTTON_START = 0x20;\n"
 "    const K10_BUTTON_COIN = 0x40;\n"
 "    const K10_BUTTON_EXTRA = 0x80;\n"
-"    const BTN_A = K10_BUTTON_FIRE, BTN_B = K10_BUTTON_FIRE, BTN_START = K10_BUTTON_START, BTN_COIN = K10_BUTTON_COIN;\n"
+"    const BTN_A = K10_BUTTON_FIRE, BTN_B = K10_BUTTON_COIN, BTN_START = K10_BUTTON_START, BTN_COIN = K10_BUTTON_COIN;\n"
 "\n"
 "    let buttons = 0, hat = 8, lx = 0, ly = 0, rx = 0, ry = 0;\n"
 "    let lastSent = \"\";\n"

@@ -578,6 +578,9 @@ void prepare_emulation(void) {
   master_attract_timeout = k10_millis();
 #endif
 
+  // reset interrupt enable flags so a previous game's state doesn't bleed in
+  irq_enable[0] = irq_enable[1] = irq_enable[2] = 0;
+
   // reset all three z80's although we might not use them all
   for(current_cpu=0;current_cpu<3;current_cpu++)
     ResetZ80(&cpu[current_cpu]);

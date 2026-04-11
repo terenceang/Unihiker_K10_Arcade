@@ -23,6 +23,9 @@ extern char game_started;
 extern unsigned char soundregs[32];
 extern unsigned char starcontrol;
 extern signed char machine;
+#ifdef ENABLE_DKONG
+extern unsigned char colortable_select;
+#endif
 }
 
 struct sprite_S {
@@ -48,8 +51,14 @@ unsigned short* frame_buffer = nullptr;
 #ifdef ENABLE_PACMAN
 #include "arcade_core/pacman.h"
 #endif
+#ifdef ENABLE_DKONG
+#include "arcade_core/dkong.h"
+#endif
 #ifdef ENABLE_1942
 #include "arcade_core/1942.h"
+#endif
+#ifdef ENABLE_FROGGER
+#include "arcade_core/frogger.h"
 #endif
 
 namespace {
@@ -112,6 +121,20 @@ void render_line(short strip_row) {
         _1942_render_row(row0);
         frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
         _1942_render_row(row1);
+    } else
+#endif
+#ifdef ENABLE_FROGGER
+    if (machine == K10_MACHINE_FROGGER) {
+        frogger_render_row(row0);
+        frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
+        frogger_render_row(row1);
+    } else
+#endif
+#ifdef ENABLE_DKONG
+    if (machine == K10_MACHINE_DKONG) {
+        dkong_render_row(row0);
+        frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
+        dkong_render_row(row1);
     } else
 #endif
     {
@@ -283,6 +306,11 @@ void update_screen_cpp() {
         last_fps_time = now;
     }
 
+#ifdef ENABLE_FROGGER
+    if (machine == K10_MACHINE_FROGGER) {
+        frogger_prepare_frame();
+    } else
+#endif
 #ifdef ENABLE_PACMAN
     if (machine == K10_MACHINE_PACMAN) {
         pacman_prepare_frame();
@@ -291,6 +319,11 @@ void update_screen_cpp() {
 #ifdef ENABLE_1942
     if (machine == K10_MACHINE_1942) {
         _1942_prepare_frame();
+    } else
+#endif
+#ifdef ENABLE_DKONG
+    if (machine == K10_MACHINE_DKONG) {
+        dkong_prepare_frame();
     } else
 #endif
     {

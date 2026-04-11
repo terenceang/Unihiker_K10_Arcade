@@ -34,7 +34,6 @@ static void start_current_machine() {
 
 static void k10_main_task(void* parameter) {
     (void)parameter;
-    k10_delay_ms(250);
 
     printf("\n");
     printf("Unihiker K10 Arcade\n");
@@ -55,22 +54,13 @@ static void k10_main_task(void* parameter) {
     }
 
     while (true) {
-        uint8_t input_state = k10_read_inputs();
+        uint8_t raw_input_state = k10_read_inputs();
 
         // Integrate WiFi Gamepad State
         k10_gamepad_state_t wifi_state;
         k10_wifi_gamepad_get_state(&wifi_state);
 
-        // WiFi status — printed only when state changes
-        static k10_gamepad_state_t last_wifi_state = {};
-        if (memcmp(&wifi_state, &last_wifi_state, sizeof(wifi_state)) != 0) {
-            last_wifi_state = wifi_state;
-            ESP_LOGI(TAG, "[WiFi] Gamepad | Btns:%04x Hat:%d LX:%4d LY:%4d RX:%4d RY:%4d",
-                     wifi_state.buttons, wifi_state.hat,
-                     wifi_state.lx, wifi_state.ly, wifi_state.rx, wifi_state.ry);
-        }
-
-        // Map LX/LY to Directions
+        uint8_t input_state = raw_input_state;
         if (wifi_state.lx < -40) input_state |= K10_BUTTON_LEFT;
         if (wifi_state.lx > 40)  input_state |= K10_BUTTON_RIGHT;
         if (wifi_state.ly < -40) input_state |= K10_BUTTON_UP;
@@ -95,6 +85,7 @@ static void k10_main_task(void* parameter) {
         // Map Buttons (A=Fire, B=Coin, Start=Start, Coin=Extra)
         // wifi_state.buttons bitmasks already match K10_BUTTON_... enums in gamepad.html
         input_state |= (uint8_t)(wifi_state.buttons & 0xFF);
+
 
         switch (k10_state_handle_input(input_state, last_input_state)) {
             case K10_STATE_EVENT_MENU_CHANGED:

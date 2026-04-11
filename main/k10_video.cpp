@@ -30,12 +30,13 @@ constexpr int kLogoRowsCount = kLogoHeight / 8;
 // Vertical pixel offset so the centred logo is visually middle-of-screen.
 constexpr int16_t kLogoTop = (K10_TFT_ACTIVE_HEIGHT - kLogoHeight) / 2;
 
-constexpr uint16_t kPanelBackground = 0x0000;
+constexpr uint16_t kPanelBackground = K10_PANEL_BACKGROUND_COLOR;
 
 // ── SPI / TFT state ───────────────────────────────────────────────────────────
 
 spi_device_handle_t g_tft_handle     = nullptr;
 spi_transaction_t   g_transactions[2] = {};
+bool                g_buffer_in_use[2] = {false, false};
 bool                g_video_ready    = false;
 uint16_t*           g_frame_buffers[2] = {nullptr, nullptr};
 uint8_t             g_buffer_index   = 0;
@@ -283,6 +284,25 @@ static void render_menu_row(uint16_t* tile_buf, int tile_row, int selection_inde
             render_logo(next_idx, next_y, sel == next_idx, tile_buf);
         }
     }
+
+    // Enforce a menu viewport rectangle to suppress visible border lines in
+    // logo assets and keep border sizing controlled from k10_config.h.
+    const int viewport_x0 = K10_MENU_VIEWPORT_X;
+    const int viewport_y0 = K10_MENU_VIEWPORT_Y;
+    const int viewport_x1 = K10_MENU_VIEWPORT_X + K10_MENU_VIEWPORT_WIDTH;
+    const int viewport_y1 = K10_MENU_VIEWPORT_Y + K10_MENU_VIEWPORT_HEIGHT;
+
+    const int y_start = tile_row * 8;
+    for (int r = 0; r < 8; ++r) {
+        const int y = y_start + r;
+        uint16_t* row_ptr = tile_buf + r * K10_TFT_ACTIVE_WIDTH;
+        for (int x = 0; x < K10_TFT_ACTIVE_WIDTH; ++x) {
+            if (x < viewport_x0 || x >= viewport_x1 ||
+                y < viewport_y0 || y >= viewport_y1) {
+                row_ptr[x] = K10_MENU_VIEWPORT_MASK_COLOR;
+            }
+        }
+    }
 }
 
 static void fill_row(uint16_t* buffer, uint16_t color) {
@@ -293,38 +313,11 @@ static void fill_row(uint16_t* buffer, uint16_t color) {
 
 // Render one 8-pixel tile row of the "you are playing" splash screen shown
 // while a game is starting.  Draws the game logo centred on a black background
-// with accent-colour bars above, below, and flanking the logo centre.
+// with a black frame.
 static void render_machine_row(uint16_t* tile_buf, uint16_t tile_row, int machine) {
+    // Draw a fully black splash screen while a game starts.
+    // This removes any remaining blue accent from the machine launch screen.
     memset(tile_buf, 0, K10_TFT_ACTIVE_WIDTH * 8 * sizeof(uint16_t));
-
-    const MenuEntry* entry  = menu_entry_for_machine(machine);
-    const uint16_t   accent = entry ? entry->accent : 0xffff;
-
-    // Solid accent bars at the top and bottom two tile rows.
-    const int last_row = K10_TFT_ACTIVE_HEIGHT / 8 - 1;
-    if (tile_row <= 1 || tile_row >= last_row - 1) {
-        fill_row(tile_buf, accent);
-        return;
-    }
-
-    // Narrower accent bar flanking the logo centre (96 px wide, horizontally centred).
-    constexpr uint32_t bar_start = (K10_TFT_ACTIVE_WIDTH / 2) - 48;
-    constexpr uint32_t bar_end   = (K10_TFT_ACTIVE_WIDTH / 2) + 48;
-    if (tile_row == 4 || tile_row == last_row - 4) {
-        for (uint32_t i = 0; i < K10_TFT_ACTIVE_WIDTH * 8; ++i) {
-            const uint32_t x = i % K10_TFT_ACTIVE_WIDTH;
-            if (x >= bar_start && x < bar_end) {
-                tile_buf[i] = accent;
-            }
-        }
-    }
-
-    // Render the centred game logo.
-    const int logo_idx = logo_idx_for_machine(machine);
-    const int16_t logo_y = static_cast<int16_t>(tile_row * 8 - kLogoTop);
-    if (logo_idx >= 0 && entry && entry->logo && logo_y > -8 && logo_y < kLogoHeight) {
-        render_logo(logo_idx, logo_y, true, tile_buf);
-    }
 }
 
 // ── Strip rendering helper ────────────────────────────────────────────────────
@@ -480,10 +473,18 @@ void set_addr_window(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
     write_command(0x2C);
 }
 
+static void mark_buffer_complete(spi_transaction_t* completed) {
+    const ptrdiff_t index = completed - g_transactions;
+    if (index >= 0 && index < 2) {
+        g_buffer_in_use[index] = false;
+    }
+}
+
 void flush_dma() {
     while (g_in_flight_count > 0) {
         spi_transaction_t* completed = nullptr;
         spi_device_get_trans_result(g_tft_handle, &completed, portMAX_DELAY);
+        mark_buffer_complete(completed);
         g_in_flight_count--;
     }
     g_dma_active = false;
@@ -591,6 +592,7 @@ void k10_video_write(const uint16_t* colors, uint32_t len) {
     g_transactions[trans_idx].tx_buffer = colors;
 
     spi_device_queue_trans(g_tft_handle, &g_transactions[trans_idx], portMAX_DELAY);
+    g_buffer_in_use[trans_idx] = true;
     g_in_flight_count++;
     g_dma_active = true;
 
@@ -618,9 +620,10 @@ void k10_video_draw_machine_frame(int machine) {
 }
 
 uint16_t* k10_video_get_draw_buffer() {
-    if (g_in_flight_count >= 2) {
+    while (g_buffer_in_use[g_buffer_index]) {
         spi_transaction_t* completed = nullptr;
         spi_device_get_trans_result(g_tft_handle, &completed, portMAX_DELAY);
+        mark_buffer_complete(completed);
         g_in_flight_count--;
     }
     return g_frame_buffers[g_buffer_index];

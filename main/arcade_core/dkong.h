@@ -196,7 +196,7 @@ static inline void dkong_blit_sprite(short row, unsigned char s) {
   // create mask for sprites that clip left or right
   unsigned long mask = 0xffffffff;
   if(sprite[s].x < 0)      mask <<= -2*sprite[s].x;
-  if(sprite[s].x > 224-16) mask >>= 2*(sprite[s].x-224-16);    
+  if(sprite[s].x > 224-16) mask >>= 2*(sprite[s].x-(224-16));
 
   short y_offset = sprite[s].y - 8*row;
 

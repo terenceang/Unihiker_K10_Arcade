@@ -23,8 +23,9 @@
 
 static const char *TAG = "K10_WIFI";
 
-static k10_gamepad_state_t g_state = {0};
+static k10_gamepad_state_t g_state = {0, 8, 0, 0, 0, 0, false};
 static SemaphoreHandle_t g_mutex = NULL;
+static bool g_wifi_init_started = false;
 
 // HTTP POST handler for /gamepad
 static esp_err_t gamepad_post_handler(httpd_req_t *req) {
@@ -35,7 +36,10 @@ static esp_err_t gamepad_post_handler(httpd_req_t *req) {
 
     uint8_t buf[8];
     int ret = httpd_req_recv(req, (char*)buf, 7);
-    if (ret <= 0) return ESP_FAIL;
+    if (ret <= 0) {
+        ESP_LOGW(TAG, "HTTP POST /gamepad recv failed: %d", ret);
+        return ESP_FAIL;
+    }
 
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         // Binary format: [btn_lo, btn_hi, hat, lx, ly, rx, ry]
@@ -74,11 +78,8 @@ static esp_err_t captive_gamepad_handler(httpd_req_t *req) {
     return gamepad_html_handler(req);
 }
 
-// Start WiFi AP and HTTP server
-void k10_wifi_gamepad_begin(void) {
-    if (g_mutex == NULL) {
-        g_mutex = xSemaphoreCreateMutex();
-    }
+static void k10_wifi_gamepad_init_task(void *parameter) {
+    (void)parameter;
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -104,7 +105,7 @@ void k10_wifi_gamepad_begin(void) {
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_LOGI(TAG, "WiFi AP started: SSID=K10-Gamepad, password=12345678");
-    // HTTP server
+
     httpd_config_t server_config = HTTPD_DEFAULT_CONFIG();
     httpd_handle_t server = NULL;
     ESP_ERROR_CHECK(httpd_start(&server, &server_config));
@@ -115,7 +116,6 @@ void k10_wifi_gamepad_begin(void) {
     };
     httpd_register_uri_handler(server, &gamepad_uri);
 
-    // Serve gamepad page at root
     httpd_uri_t html_uri = {
         .uri = "/",
         .method = HTTP_GET,
@@ -123,7 +123,6 @@ void k10_wifi_gamepad_begin(void) {
     };
     httpd_register_uri_handler(server, &html_uri);
 
-    // Captive portal endpoints (Android, iOS, Windows)
     httpd_uri_t captive1 = {
         .uri = "/generate_204",
         .method = HTTP_GET,
@@ -143,19 +142,37 @@ void k10_wifi_gamepad_begin(void) {
     };
     httpd_register_uri_handler(server, &captive3);
 
-    // Catch-all: redirect all other GET requests to root
     httpd_uri_t catchall = {
         .uri = "/*",
         .method = HTTP_GET,
         .handler = captive_redirect_handler
     };
     httpd_register_uri_handler(server, &catchall);
+
+    vTaskDelete(NULL);
+}
+
+void k10_wifi_gamepad_begin(void) {
+    if (g_mutex == NULL) {
+        g_mutex = xSemaphoreCreateMutex();
+    }
+    if (g_wifi_init_started) {
+        return;
+    }
+    g_wifi_init_started = true;
+    xTaskCreatePinnedToCore(k10_wifi_gamepad_init_task, "k10_wifi_init", 8192, NULL, 1, NULL, 1);
 }
 
 void k10_wifi_gamepad_get_state(k10_gamepad_state_t *state) {
     if (!state || !g_mutex) return;
+
+    k10_gamepad_state_t default_state = {0, 8, 0, 0, 0, 0, false};
+    *state = default_state;
+
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-        memcpy(state, &g_state, sizeof(k10_gamepad_state_t));
+        if (g_state.connected) {
+            *state = g_state;
+        }
         xSemaphoreGive(g_mutex);
     }
 }
