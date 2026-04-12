@@ -1,16 +1,16 @@
 set(srcs
         "main.cpp"
-        "k10_state.cpp"
-        "k10_emulator.cpp"
-        "k10_emulator_core.c"
-        "k10_hardware.cpp"
-        "k10_video.cpp"
-        "k10_wifi_gamepad.cpp")
+        "state/k10_state.cpp"
+        "emulator/k10_emulator.cpp"
+        "emulator/k10_emulator_core.c"
+        "hardware/k10_hardware.cpp"
+        "hardware/k10_video.cpp"
+        "state/k10_wifi_gamepad.cpp")
 
 set(requires "")
 
 idf_component_register(SRCS "${srcs}"
-                    INCLUDE_DIRS "." "arcade_core"
+                    INCLUDE_DIRS "." "arcade_core" "config" "hardware" "emulator" "state" "gamepad"
                     REQUIRES "${requires}"
 )
-set_property(TARGET ${COMPONENT_LIB} PROPERTY embed_txtfiles "gamepad.html")
+set_property(TARGET ${COMPONENT_LIB} PROPERTY embed_txtfiles "gamepad/gamepad.html")
