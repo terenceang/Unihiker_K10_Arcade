@@ -5,6 +5,7 @@
 #include "k10_state.h"
 
 bool k10_video_begin();
+bool k10_video_set_machine_clock(K10Machine machine);
 void k10_video_begin_frame();
 // Writes the provided buffer to the display and swaps to the other internal buffer.
 void k10_video_write(const uint16_t* colors, uint32_t len);

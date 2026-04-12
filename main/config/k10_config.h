@@ -24,7 +24,13 @@
 
 // SPI wiring.
 #define K10_TFT_SPI_HOST SPI3_HOST
-#define K10_TFT_SPICLK 60000000
+#define K10_TFT_SPICLK 80000000
+#define K10_TFT_SPICLK_PACMAN 80000000
+#define K10_TFT_SPICLK_GALAGA 80000000
+#define K10_TFT_SPICLK_DKONG 80000000
+#define K10_TFT_SPICLK_FROGGER 80000000
+#define K10_TFT_SPICLK_DIGDUG 80000000
+#define K10_TFT_SPICLK_1942 80000000
 #define K10_TFT_MISO -1
 #define K10_TFT_MOSI 21
 #define K10_TFT_SCLK 12
@@ -47,7 +53,9 @@
 #define K10_TFT_ACTIVE_HEIGHT 288
 
 // Strip-based DMA rendering geometry.
-#define K10_TFT_STRIP_HEIGHT 16
+// Larger strips spend more DMA-capable RAM but reduce per-frame SPI/DMA overhead.
+// Keep this a multiple of 8 and an exact divisor of K10_TFT_ACTIVE_HEIGHT.
+#define K10_TFT_STRIP_HEIGHT 48
 #define K10_TFT_STRIP_COUNT (K10_TFT_ACTIVE_HEIGHT / K10_TFT_STRIP_HEIGHT)
 
 // Global panel background color (RGB565, byte-swapped as used by the renderer).
@@ -77,7 +85,7 @@
 
 // System-wide defaults.
 #define K10_AUDIO_VOLUME 30       // 0 (mute) to 100 (full)
-#define K10_AUDIO_BUFFER_FRAMES 64 // Samples per synthesis/DMA chunk
+#define K10_AUDIO_BUFFER_FRAMES 128 // Samples per synthesis/DMA chunk; larger chunks reduce submit overhead
 #define K10_AUDIO_BUFFER_BYTES (K10_AUDIO_BUFFER_FRAMES * 2 * sizeof(int16_t)) // Stereo 16-bit
 
 // -----------------------------------------------------------------------------

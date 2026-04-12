@@ -60,6 +60,8 @@ namespace {
 
 constexpr uint32_t kFramePixels = K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT;
 constexpr uint32_t kFrameBytes = kFramePixels * sizeof(uint16_t);
+// The original arcade boards for the supported titles run at about 60 Hz,
+// so keep the present loop pinned to that cadence instead of speeding games up.
 constexpr uint64_t kFramePeriodUs = 16667;
 constexpr uint32_t kEmulationTaskStackWords = 4096;
 constexpr UBaseType_t kEmulationTaskPriority = 2;
@@ -105,12 +107,9 @@ inline void render_two_rows(RenderRowFn render_fn, short row0, short row1) {
     render_fn(row1);
 }
 
-void render_line(short strip_row) {
-    memset(frame_buffer, 0, kFrameBytes);
-    unsigned short* const original_buffer = frame_buffer;
-
-    const short row0 = strip_row * 2;
-    const short row1 = strip_row * 2 + 1;
+void render_line_pair(short pair_row) {
+    const short row0 = pair_row * 2;
+    const short row1 = pair_row * 2 + 1;
 
 #ifdef ENABLE_PACMAN
 PACMAN_BEGIN
@@ -142,6 +141,19 @@ _1942_BEGIN
     render_two_rows(_1942_render_row, row0, row1);
 _1942_END
 #endif
+
+}
+
+void render_line(short strip_row) {
+    memset(frame_buffer, 0, kFrameBytes);
+    unsigned short* const original_buffer = frame_buffer;
+    constexpr int kPairPixels = K10_TFT_ACTIVE_WIDTH * 16;
+    constexpr int kPairsPerStrip = K10_TFT_STRIP_HEIGHT / 16;
+
+    for (int pair = 0; pair < kPairsPerStrip; ++pair) {
+        frame_buffer = original_buffer + pair * kPairPixels;
+        render_line_pair(static_cast<short>(strip_row * kPairsPerStrip + pair));
+    }
 
     frame_buffer = original_buffer;
 }
@@ -521,6 +533,10 @@ bool k10_emulator_start(K10Machine machine) {
     }
 
     teardown_emulation_task();
+
+    if (!k10_video_set_machine_clock(machine)) {
+        return false;
+    }
 
     if (!k10_video_begin() || !ensure_runtime_allocations()) {
         return false;

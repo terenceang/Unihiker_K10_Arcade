@@ -43,6 +43,7 @@ uint16_t*           g_dma_staging_buffer = nullptr;
 uint8_t             g_buffer_index   = 0;
 int                 g_in_flight_count = 0;
 bool                g_dma_active     = false;
+uint32_t            g_current_spi_clock_hz = K10_TFT_SPICLK;
 
 // ── Menu entry table ──────────────────────────────────────────────────────────
 
@@ -75,6 +76,30 @@ const MenuEntry g_menu_entries[] = {
 };
 
 constexpr size_t kMenuEntryCount = sizeof(g_menu_entries) / sizeof(g_menu_entries[0]);
+
+uint32_t spi_clock_for_machine(K10Machine machine) {
+    switch (machine) {
+#ifdef ENABLE_PACMAN
+    case K10_MACHINE_PACMAN: return K10_TFT_SPICLK_PACMAN;
+#endif
+#ifdef ENABLE_GALAGA
+    case K10_MACHINE_GALAGA: return K10_TFT_SPICLK_GALAGA;
+#endif
+#ifdef ENABLE_DKONG
+    case K10_MACHINE_DKONG: return K10_TFT_SPICLK_DKONG;
+#endif
+#ifdef ENABLE_FROGGER
+    case K10_MACHINE_FROGGER: return K10_TFT_SPICLK_FROGGER;
+#endif
+#ifdef ENABLE_DIGDUG
+    case K10_MACHINE_DIGDUG: return K10_TFT_SPICLK_DIGDUG;
+#endif
+#ifdef ENABLE_1942
+    case K10_MACHINE_1942: return K10_TFT_SPICLK_1942;
+#endif
+    default: return K10_TFT_SPICLK;
+    }
+}
 
 // ── Logo row cache ────────────────────────────────────────────────────────────
 //
@@ -576,6 +601,39 @@ bool k10_video_begin() {
 
     g_video_ready = true;
     printf("Video: ILI9341 initialized\n");
+    return true;
+}
+
+bool k10_video_set_machine_clock(K10Machine machine) {
+    const uint32_t new_clock_hz = spi_clock_for_machine(machine);
+    if (new_clock_hz == g_current_spi_clock_hz) return true;
+
+    g_if_cfg.clock_speed_hz = new_clock_hz;
+
+    if (!g_video_ready) {
+        g_current_spi_clock_hz = new_clock_hz;
+        return true;
+    }
+
+    flush_dma();
+    write_gpio(K10_TFT_CS, 1);
+
+    const spi_device_handle_t old_handle = g_tft_handle;
+    esp_err_t result = spi_bus_remove_device(old_handle);
+    if (result != ESP_OK) {
+        printf("Video: SPI device remove failed: 0x%x\n", result);
+        return false;
+    }
+
+    g_tft_handle = nullptr;
+    result = spi_bus_add_device(K10_TFT_SPI_HOST, &g_if_cfg, &g_tft_handle);
+    if (result != ESP_OK) {
+        printf("Video: SPI device re-add failed: 0x%x\n", result);
+        g_tft_handle = old_handle;
+        return false;
+    }
+
+    g_current_spi_clock_hz = new_clock_hz;
     return true;
 }
 
