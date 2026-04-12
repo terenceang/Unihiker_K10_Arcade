@@ -48,7 +48,7 @@
 - ROMs must be converted to C headers and included in the `arcade_core` directory.
 
 ### Hardware Mapping
-- Pin definitions are centralized in `main/k10_config.h`.
+- Pin definitions are centralized in `main/config/k10_config.h`.
 - Backlight and onboard buttons are accessed via the XL9535 IO Expander at I2C address `0x20`.
 
 ### Troubleshooting

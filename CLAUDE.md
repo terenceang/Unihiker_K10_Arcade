@@ -25,17 +25,17 @@ The codebase is layered:
 
 1. **Entry point** (`main.cpp`) — `app_main()` creates a single FreeRTOS task that polls input and drives the state machine.
 2. **State machine** (`k10_state.*`) — Owns menu navigation and game selection. `K10Machine` enum lists all supported games (MENU, PACMAN, GALAGA, DKONG, FROGGER, DIGDUG, 1942).
-3. **Emulator bridge** (`k10_emulator.*`) — Sits between the app and the emulation core; manages per-frame execution and game lifecycle.
-4. **Emulation core** (`arcade_core/emulation.c` + `arcade_core/config.h`) — Z80 CPU emulator and game-specific logic. Games are conditionally compiled via `#define ENABLE_*` macros. Only `ENABLE_GALAGA` is active.
-5. **Hardware drivers** — `k10_hardware.*` (I2C/I2S/XL9535 expander), `k10_video.*` (ILI9341 TFT via SPI, double-buffering), `k10_bt.*` (NimBLE BLE HID host for 8BitDo gamepads).
+3. **Emulator bridge** (`main/emulator/k10_emulator.*`) — Sits between the app and the emulation core; manages per-frame execution and game lifecycle.
+4. **Emulation core** (`main/arcade_core/emulation.c` + `main/arcade_core/config.h`) — Z80 CPU emulator and game-specific logic. Games are conditionally compiled via `#define ENABLE_*` macros.
+5. **Hardware drivers** — `main/hardware/k10_hardware.*` (I2C/I2S/XL9535 expander), `main/hardware/k10_video.*` (ILI9341 TFT via SPI, double-buffering), `main/state/k10_wifi_gamepad.cpp` (NimBLE BLE HID host for 8BitDo gamepads).
 
 ### Key Configuration Files
 
 | File | Purpose |
 |------|---------|
-| `main/k10_config.h` | All pin definitions, I2C/SPI/I2S config, display geometry, audio sample rates |
+| `main/config/k10_config.h` | All pin definitions, I2C/SPI/I2S config, display geometry, audio sample rates |
 | `main/arcade_core/config.h` | `ENABLE_*` macros to toggle games at compile time |
-| `main/k10_state.cpp` | Boot machine selection and menu flow |
+| `main/state/k10_state.cpp` | Boot machine selection and menu flow |
 | `platformio.ini` | PlatformIO build environment for the `unihiker_k10_arcade` target |
 | `boards/unihiker_k10_arcade.json` | Custom PlatformIO board definition |
 | `sdkconfig.unihiker_k10_arcade` | ESP-IDF Kconfig (generated; do not edit manually) |
@@ -56,12 +56,12 @@ ROMs are embedded as C header arrays in `main/arcade_core/`. The `romconv/` dire
 1. Convert ROM binaries using `romconv/` tools.
 2. Place resulting `.h` files in `main/arcade_core/`.
 3. Add an `#define ENABLE_<GAME>` guard in `arcade_core/config.h` and implement the machine logic in `emulation.c`.
-4. Add a `K10Machine` enum entry in `k10_state.h` and wire it into `k10_state.cpp` and `k10_emulator.cpp`.
+4. Add a `K10Machine` enum entry in `main/state/k10_state.h` and wire it into `main/state/k10_state.cpp` and `main/emulator/k10_emulator.cpp`.
 
 ### Input
 
 - Onboard buttons currently disabled (`K10_DISABLE_ONBOARD_BUTTONS=1`); input comes from BLE HID gamepad (8BitDo).
-- Virtual button bitmasks are defined in `main/k10_input.h` (UP/DOWN/LEFT/RIGHT/FIRE/START/COIN/EXTRA).
+- Virtual button bitmasks are defined in `main/hardware/k10_input.h` (UP/DOWN/LEFT/RIGHT/FIRE/START/COIN/EXTRA).
 
 ### Audio Sample Rates
 

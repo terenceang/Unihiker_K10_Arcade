@@ -3,7 +3,7 @@ import sys
 
 if len(sys.argv) != 2:
     print("Usage:",sys.argv[0], "<outfile>")
-    print("  ", sys.argv[0], "../galagino/tileaddr.h")
+    print("  ", sys.argv[0], "../main/arcade_core/tileaddr.h")
     sys.exit(-1)
 
 with open(sys.argv[1], "w") as f:
@@ -37,4 +37,5 @@ with open(sys.argv[1], "w") as f:
 
   print(",\n".join(rows), file=f)
   print("};", file=f)
+
 

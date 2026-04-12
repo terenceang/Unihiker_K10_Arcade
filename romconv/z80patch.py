@@ -3,7 +3,7 @@ import zipfile
 
 ZIPLOC="../roms/"
 ZIP="Z80-081707.zip"
-DEST="../galagino/"
+DEST="../main/arcade_core/cpu/z80/"
 
 FILES2COPY=[ "CodesCB.h", "Codes.h", "CodesXX.h", "CodesED.h", "CodesXCB.h", "Tables.h" ]
 
@@ -99,4 +99,6 @@ def unpack_z80(name):
             of.write(Z80C_EXTRA)
 
 unpack_z80(ZIPLOC + ZIP)
+
+
 

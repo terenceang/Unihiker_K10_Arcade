@@ -98,7 +98,8 @@ def dump_starset(name):
 
 if len(sys.argv) != 2:
     print("Usage:",sys.argv[0], "<outfile>")
-    print("  ", sys.argv[0], "../galagino/galaga_starseed.h")
+    print("  ", sys.argv[0], "../main/arcade_core/games/galaga/galaga_starseed.h")
     sys.exit(-1)
 
 dump_starset(sys.argv[1])    
+

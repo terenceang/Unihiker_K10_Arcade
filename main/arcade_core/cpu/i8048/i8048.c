@@ -1,5 +1,5 @@
 /*
- * i8048.c - 8048 emulator for galagino/donkey kong arcade audio
+ * i8048.c - 8048 emulator for this project/donkey kong arcade audio
  *           controller
  *
  * This emulation does not implement all instructions. Especially

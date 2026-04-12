@@ -29,7 +29,7 @@ The Unihiker K10 does **not** have a physical D-pad or Joystick.
 ## Software Configuration
 
 ### Disabling Inputs
-To ignore all onboard button inputs (e.g., during hardware debugging or when using external controls), set the following macro in `main/k10_config.h`:
+To ignore all onboard button inputs (e.g., during hardware debugging or when using external controls), set the following macro in `main/config/k10_config.h`:
 
 ```cpp
 #define K10_DISABLE_ONBOARD_BUTTONS 1

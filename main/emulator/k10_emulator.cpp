@@ -47,18 +47,18 @@ unsigned short* frame_buffer = nullptr;
 
 #define IO_EMULATION
 #include "arcade_core/tileaddr.h"
-#include "arcade_core/galaga.h"
+#include "arcade_core/games/galaga/galaga.h"
 #ifdef ENABLE_PACMAN
-#include "arcade_core/pacman.h"
+#include "arcade_core/games/pacman/pacman.h"
 #endif
 #ifdef ENABLE_DKONG
-#include "arcade_core/dkong.h"
+#include "arcade_core/games/dkong/dkong.h"
 #endif
 #ifdef ENABLE_1942
-#include "arcade_core/1942.h"
+#include "arcade_core/games/_1942/1942.h"
 #endif
 #ifdef ENABLE_FROGGER
-#include "arcade_core/frogger.h"
+#include "arcade_core/games/frogger/frogger.h"
 #endif
 
 namespace {

@@ -249,14 +249,14 @@ def parse_charmap_2(innames, outname):
 
 if len(sys.argv) != 3 and len(sys.argv) != 4 and len(sys.argv) != 8:
     print("Usage:",sys.argv[0], "<infile> <outfile>")
-    print("  Galaga:     ", sys.argv[0], "../roms/gg1_9.4l ../galagino/galaga_tilemap.h")
-    print("  Pacman:     ", sys.argv[0], "../roms/pacman.5e ../galagino/pacman_tilemap.h")
-    print("  Donkey Kong:", sys.argv[0], "../roms/v_5h_b.bin ../roms/v_3pt.bin ../galagino/dkong_tilemap.h")
-    print("  Frogger:    ", sys.argv[0], "../roms/frogger.606 ../roms/frogger.607 ../galagino/frogger_tilemap.h")
-    print("  Digdug:     ", sys.argv[0], "../roms/dd1.9 ../galagino/digdug_tilemap.h")
-    print("  Digdug pf:  ", sys.argv[0], "../roms/dd1.11 ../galagino/digdug_pftiles.h")
-    print("  1942 chars: ", sys.argv[0], "../roms/sr-02.f2 ../galagino/1942_charmap.h")
-    print("  1942 tiles: ", sys.argv[0], "../roms/sr-08.a1 ../roms/sr-09.a2 ../roms/sr-10.a3 ../roms/sr-11.a4 ../roms/sr-12.a5 ../roms/sr-13.a6 ../galagino/1942_tilemap.h")
+    print("  Galaga:     ", sys.argv[0], "../roms/gg1_9.4l ../main/arcade_core/games/galaga/galaga_tilemap.h")
+    print("  Pacman:     ", sys.argv[0], "../roms/pacman.5e ../main/arcade_core/games/pacman/pacman_tilemap.h")
+    print("  Donkey Kong:", sys.argv[0], "../roms/v_5h_b.bin ../roms/v_3pt.bin ../main/arcade_core/games/dkong/dkong_tilemap.h")
+    print("  Frogger:    ", sys.argv[0], "../roms/frogger.606 ../roms/frogger.607 ../main/arcade_core/games/frogger/frogger_tilemap.h")
+    print("  Digdug:     ", sys.argv[0], "../roms/dd1.9 ../main/arcade_core/games/digdug/digdug_tilemap.h")
+    print("  Digdug pf:  ", sys.argv[0], "../roms/dd1.11 ../main/arcade_core/games/digdug/digdug_pftiles.h")
+    print("  1942 chars: ", sys.argv[0], "../roms/sr-02.f2 ../main/arcade_core/games/_1942/1942_charmap.h")
+    print("  1942 tiles: ", sys.argv[0], "../roms/sr-08.a1 ../roms/sr-09.a2 ../roms/sr-10.a3 ../roms/sr-11.a4 ../roms/sr-12.a5 ../roms/sr-13.a6 ../main/arcade_core/games/_1942/1942_tilemap.h")
     exit(-1)
 
 if len(sys.argv) == 8:
@@ -267,3 +267,4 @@ elif len(sys.argv) == 3:
 else:
     # len == 4
     parse_charmap_2(sys.argv[1:3], sys.argv[3])
+

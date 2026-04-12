@@ -8,12 +8,12 @@
 #include "driver/spi_master.h"
 
 #include "arcade_core/config.h"
-#include "arcade_core/pacman_logo.h"
-#include "arcade_core/galaga_logo.h"
-#include "arcade_core/dkong_logo.h"
-#include "arcade_core/frogger_logo.h"
-#include "arcade_core/digdug_logo.h"
-#include "arcade_core/1942_logo.h"
+#include "arcade_core/games/pacman/pacman_logo.h"
+#include "arcade_core/games/galaga/galaga_logo.h"
+#include "arcade_core/games/dkong/dkong_logo.h"
+#include "arcade_core/games/frogger/frogger_logo.h"
+#include "arcade_core/games/digdug/digdug_logo.h"
+#include "arcade_core/games/_1942/1942_logo.h"
 
 #include "k10_config.h"
 #include "k10_hardware.h"

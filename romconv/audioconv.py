@@ -44,9 +44,9 @@ def parse_wavetable(name, infiles, outfile):
         
 if len(sys.argv) < 4:
     print("Usage:",sys.argv[0], "name <infiles> <outfile>")
-    print("  Galaga wavetable: ", sys.argv[0], "galaga_wavetable ../roms/prom-1.1d ../galagino/galaga_wavetable.h")
-    print("  Pacman wavetable: ", sys.argv[0], "pacman_wavetable ../roms/82s126.1m ../roms/82s126.3m ../galagino/pacman_wavetable.h")
-    print("  Digdug wavetable: ", sys.argv[0], "digdug_wavetable ../roms/136007.110 ../roms/136007.109 ../galagino/digdug_wavetable.h")
+    print("  Galaga wavetable: ", sys.argv[0], "galaga_wavetable ../roms/prom-1.1d ../main/arcade_core/games/galaga/galaga_wavetable.h")
+    print("  Pacman wavetable: ", sys.argv[0], "pacman_wavetable ../roms/82s126.1m ../roms/82s126.3m ../main/arcade_core/games/pacman/pacman_wavetable.h")
+    print("  Digdug wavetable: ", sys.argv[0], "digdug_wavetable ../roms/136007.110 ../roms/136007.109 ../main/arcade_core/games/digdug/digdug_wavetable.h")
 
     exit(-1)
 
@@ -54,3 +54,4 @@ parse_wavetable(sys.argv[1], sys.argv[2:-1], sys.argv[-1])
 
 
     
+

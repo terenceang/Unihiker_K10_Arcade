@@ -1,7 +1,7 @@
 # ROMs
 
 This directory contains ROM files and other data required to build
-galagino. The *Galaga Namco Rev. B* romset contains the orignal rom
+this project. The *Galaga Namco Rev. B* romset contains the orignal rom
 files from the galaga arcade. These files are also needed for
 emulators like MAME and can easily be found online. If Pac-Man and/or
 Donkey Kong, Frogger, Digdug an 1942 are to be included as well, then

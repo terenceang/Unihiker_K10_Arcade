@@ -93,12 +93,13 @@ def parse_logo(inname, outname):
     
 if len(sys.argv) != 3:
     print("Usage:",sys.argv[0], "<infile> <outfile>")
-    print("  Pacman:     ", sys.argv[0], "../logos/pacman.png ../galagino/pacman_logo.h")
-    print("  Galaga:     ", sys.argv[0], "../logos/galaga.png ../galagino/galaga_logo.h")
-    print("  Donkey Kong:", sys.argv[0], "../logos/dkong.png ../galagino/dkong_logo.h")
-    print("  Frogger:    ", sys.argv[0], "../logos/frogger.png ../galagino/frogger_logo.h")
-    print("  Digdug:     ", sys.argv[0], "../logos/digdug.png ../galagino/digdug_logo.h")
-    print("  1942:       ", sys.argv[0], "../logos/1942.png ../galagino/1942_logo.h")
+    print("  Pacman:     ", sys.argv[0], "../logos/pacman.png ../main/arcade_core/games/pacman/pacman_logo.h")
+    print("  Galaga:     ", sys.argv[0], "../logos/galaga.png ../main/arcade_core/games/galaga/galaga_logo.h")
+    print("  Donkey Kong:", sys.argv[0], "../logos/dkong.png ../main/arcade_core/games/dkong/dkong_logo.h")
+    print("  Frogger:    ", sys.argv[0], "../logos/frogger.png ../main/arcade_core/games/frogger/frogger_logo.h")
+    print("  Digdug:     ", sys.argv[0], "../logos/digdug.png ../main/arcade_core/games/digdug/digdug_logo.h")
+    print("  1942:       ", sys.argv[0], "../logos/1942.png ../main/arcade_core/games/_1942/1942_logo.h")
     exit(-1)
 
 parse_logo(sys.argv[1], sys.argv[2])
+

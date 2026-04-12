@@ -42,3 +42,4 @@ if __name__ == "__main__":
         print("Usage: python html2c.py input.html output.inc")
         sys.exit(1)
     html_to_c_array(sys.argv[1], sys.argv[2])
+

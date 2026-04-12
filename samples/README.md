@@ -1,29 +1,44 @@
 # Samples
 
-Some arcade machines contained special hardware to generate certain
-sounds. Emulating this hardware may be tricky and the flash memory
-size of the ESP32 allows to store some of these as digital sound
-samples.
+Some arcade machines use analog or discrete sound hardware that is easier to
+reproduce as short digital samples on ESP32.
 
-This directory contains one sample needed for the explosion sound
-in Galaga and three more samples for Donkey Kong.
+This folder contains .s8 source samples that are converted into C headers for
+the emulator core.
 
-These have to be converted into C source code using the
-[romconv.py](../romconv/romconv.py) tool.
+## Input Files
 
-```
-../romconv/romconv.py galaga_sample_boom ./galaga_boom.s8 ../galagino/galaga_sample_boom.h
-```
+- galaga_boom.s8
+- dkong_walk0.s8
+- dkong_walk1.s8
+- dkong_walk2.s8
+- dkong_jump.s8
+- dkong_stomp.s8
 
-Donkey Kong does most audio via its MB8884/I8048 audio CPU. But three
-sounds are generated via discrete logic including three variants of
-the walk sound. These are still regenerated using samples.
+## Output Location
 
+Generated headers should be written to:
 
-```
-../romconv/romconv.py dkong_sample_walk0 ./dkong_walk0.s8 ../galagino/dkong_sample_walk0.h
-../romconv/romconv.py dkong_sample_walk1 ./dkong_walk1.s8 ../galagino/dkong_sample_walk1.h
-../romconv/romconv.py dkong_sample_walk2 ./dkong_walk2.s8 ../galagino/dkong_sample_walk2.h
-../romconv/romconv.py dkong_sample_jump ./dkong_jump.s8 ../galagino/dkong_sample_jump.h
-../romconv/romconv.py dkong_sample_stomp ./dkong_stomp.s8 ../galagino/dkong_sample_stomp.h
-```
+- ../main/arcade_core/games/galaga/
+- ../main/arcade_core/games/dkong/
+
+## Convert Commands
+
+Run these commands from the samples directory.
+
+### Galaga
+
+python ../romconv/romconv.py galaga_sample_boom ./galaga_boom.s8 ../main/arcade_core/games/galaga/galaga_sample_boom.h
+
+### Donkey Kong
+
+python ../romconv/romconv.py dkong_sample_walk0 ./dkong_walk0.s8 ../main/arcade_core/games/dkong/dkong_sample_walk0.h
+python ../romconv/romconv.py dkong_sample_walk1 ./dkong_walk1.s8 ../main/arcade_core/games/dkong/dkong_sample_walk1.h
+python ../romconv/romconv.py dkong_sample_walk2 ./dkong_walk2.s8 ../main/arcade_core/games/dkong/dkong_sample_walk2.h
+python ../romconv/romconv.py dkong_sample_jump  ./dkong_jump.s8  ../main/arcade_core/games/dkong/dkong_sample_jump.h
+python ../romconv/romconv.py dkong_sample_stomp ./dkong_stomp.s8 ../main/arcade_core/games/dkong/dkong_sample_stomp.h
+
+## Notes
+
+- Donkey Kong uses an MB8884/I8048 audio CPU for most sounds.
+- The listed DK samples are for effects generated via discrete logic.

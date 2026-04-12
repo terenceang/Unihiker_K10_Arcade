@@ -8,7 +8,7 @@ Code reference: Galadino
 
 ## Overview
 
-This project targets the UNIHIKER K10 and runs a classic arcade-style emulator on the board's ESP32-S3 hardware. The current configuration is focused on Galaga and boots directly into that game.
+This project targets the UNIHIKER K10 and runs a classic arcade-style emulator on the board's ESP32-S3 hardware.
 
 The codebase separates board support, video, audio, input handling, and the emulation core so it can be extended later for additional arcade machines.
 
@@ -19,16 +19,17 @@ The codebase separates board support, video, audio, input handling, and the emul
 - Display: ILI9341 TFT, 240x320
 - Audio output: I2S
 - IO expander: XL9535
-- Default game: Galaga
-- Menu and additional machine entries exist in the app layer, but the current emulator runtime only supports Galaga
+- Enabled machine builds: Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug, 1942
+- Default menu preference: Galaga (used when no previous NVS selection exists)
+- Menu state restores the last selected machine from NVS and supports idle auto-launch
 
 ## Features
 
-- Galaga emulation integrated directly into the firmware image
+- Multi-machine emulator build controlled by compile-time `ENABLE_*` flags
 - Double-buffered frame presentation to the TFT display
 - I2S audio playback for arcade sound generation
 - XL9535-based onboard button and backlight handling
-- Lightweight application layer that can switch between menu mode and emulator mode
+- App-level menu flow with persisted last selection and idle random-launch
 
 ## Hardware Notes
 
@@ -39,18 +40,20 @@ The project is configured for the UNIHIKER K10 board hardware:
 - I2S audio pins configured for the K10 audio path
 - Onboard Key A and Key B read through the XL9535 expander
 
-Pin and hardware constants are centralized in `main/k10_config.h`.
+Pin and hardware constants are centralized in `main/config/k10_config.h`.
 
 ## Controls
 
-In the current build, the onboard buttons are mapped as follows:
+Input is abstracted through `main/hardware/k10_input.h` virtual button bits (`K10_BUTTON_*`).
 
-- Key A: Fire
-- Key B: Coin
-- Key A + Key B: Start
-- Key A + Key B during gameplay: Restart or return action, depending on app mode
+In-game control behavior implemented in the state layer:
 
-Direction button enums and menu navigation paths already exist in the code, but the present hardware input layer is primarily set up for the onboard A/B buttons.
+- `START + COIN`: Return to menu
+- `FIRE` or `START` or `COIN` from menu: Launch selected game
+
+Onboard button handling can be disabled by configuration:
+
+- `K10_DISABLE_ONBOARD_BUTTONS` in `main/config/k10_config.h` is currently set to `1`.
 
 ## Build Requirements
 
@@ -95,33 +98,61 @@ pio run -e unihiker_k10_arcade -t fullclean
 |- docs/
 |- main/
 |  |- arcade_core/        # Emulator core, ROM data, tables, game-specific logic
-|  |- k10_state.*         # Menu state, boot mode, and game flow
-|  |- k10_emulator.*      # Runtime bridge between app and emulation core
-|  |- k10_hardware.*      # K10 hardware setup, expander access, audio, inputs
-|  |- k10_video.*         # Display startup and frame output
+|  |  |- cpu/             # CPU emulators and opcode tables
+|  |  |  |- z80/
+|  |  |  `- i8048/
+|  |  |- games/           # Per-game assets and machine implementations
+|  |  |  |- pacman/
+|  |  |  |- galaga/
+|  |  |  |- dkong/
+|  |  |  |- frogger/
+|  |  |  |- digdug/
+|  |  |  `- _1942/
+|  |  `- emulation/       # Shared emulator orchestration modules
+|  |- emulator/           # Runtime bridge between app and emulation core
+|  |- hardware/           # K10 hardware setup, expander access, audio, inputs
+|  |- state/              # Menu state, boot mode, and game flow
+|  |- config/             # Board and runtime configuration headers
 |  `- main.cpp            # ESP-IDF entry point and main FreeRTOS application task
 |- platformio.ini
 `- CMakeLists.txt
 ```
+
+### Emulator Core Layout
+
+`main/arcade_core/emulation.c` is intentionally thin and delegates into focused modules under `main/arcade_core/emulation/`.
+
+Game-specific machine files and assets are now grouped by title under `main/arcade_core/games/`.
+
+Shared emulation modules:
+
+- `emulation_state.inc`: shared emulator state and globals
+- `emulation_cpu_hooks.inc`: Z80 callback hook wiring and memory/IO dispatch integration
+- `emulation_dispatch.inc`: `RdZ80`/`WrZ80`/`InZ80`/`OutZ80`
+- `emulation_digdug_dkong.inc`: Dig Dug Namco I/O and DKong 8048 audio bridge helpers
+- `emulation_menu.inc`: menu-frame logic
+- `emulation_run_games.inc`: per-machine frame execution dispatch
+- `emulation_orchestration.inc`: menu-vs-game routing
+- `emulation_lifecycle.inc`: reset/startup lifecycle (`emulation_reset`, `prepare_emulation`)
+- `emulation_frame_sync.inc`: frame pacing and attract timeout checks
 
 ## Configuration
 
 Important configuration points:
 
 - `main/arcade_core/config.h`: enabled arcade machines and low-level emulator options
-- `main/k10_state.cpp`: boot machine, menu state, and game flow
-- `main/k10_config.h`: K10 pin map, display geometry, audio rates, and expander layout
+- `main/state/k10_state.cpp`: boot machine, menu state, NVS selection restore, and game flow
+- `main/config/k10_config.h`: K10 pin map, display geometry, audio rates, and expander layout
 
 At the moment:
 
-- `ENABLE_GALAGA` is active
-- The boot machine is set to `K10_MACHINE_GALAGA`
-- Only Galaga is reported as supported by the runtime
+- `ENABLE_PACMAN`, `ENABLE_GALAGA`, `ENABLE_DKONG`, `ENABLE_FROGGER`, `ENABLE_DIGDUG`, and `ENABLE_1942` are active
+- Default machine fallback is `K10_MACHINE_GALAGA`
+- Menu idle-launch timeout is enabled (`MASTER_ATTRACT_MENU_TIMEOUT` in `main/arcade_core/config.h`)
 
 ## Notes for Development
 
-- The app layer already includes placeholders for Pac-Man, Donkey Kong, Frogger, Dig Dug, and 1942
-- Additional games will require emulator support and any needed ROM/header integration
+- Additional games require emulator support plus ROM/header integration under `main/arcade_core/`
 - Hardware bring-up, audio timing, and display timing are tuned specifically for the K10 target
 
 ## Credits

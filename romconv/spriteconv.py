@@ -225,13 +225,14 @@ def parse_spritemap(id, fmt, infiles, outfile):
 
 if len(sys.argv) < 5:
     print("Usage:",sys.argv[0], "id format <infiles> <outfile>")
-    print("  Galaga:     ", sys.argv[0], "galaga_sprites galaga ../roms/gg1_11.4d ../roms/gg1_10.4f ../galagino/galaga_spritemap.h")
-    print("  Pacman:     ", sys.argv[0], "pacman_sprites pacman ../roms/pacman.5f ../galagino/pacman_spritemap.h")
-    print("  Donkey Kong:", sys.argv[0], "dkong_sprites dkong ../roms/l_4m_b.bin  ../roms/l_4n_b.bin  ../roms/l_4r_b.bin  ../roms/l_4s_b.bin ../galagino/dkong_spritemap.h")
-    print("  Frogger:    ", sys.argv[0], "frogger_sprites frogger ../roms/frogger.606 ../roms/frogger.607 ../galagino/frogger_spritemap.h")
-    print("  Digdug:     ", sys.argv[0], "digdug_sprites digdug ../roms/dd1.15 ../roms/dd1.14 ../roms/dd1.13 ../roms/dd1.12 ../galagino/digdug_spritemap.h")
-    print("  1942:       ", sys.argv[0], "_1942_sprites 1942 ../roms/sr-14.l1 ../roms/sr-15.l2 ../roms/sr-16.n1 ../roms/sr-17.n2 ../galagino/1942_spritemap.h")
+    print("  Galaga:     ", sys.argv[0], "galaga_sprites galaga ../roms/gg1_11.4d ../roms/gg1_10.4f ../main/arcade_core/games/galaga/galaga_spritemap.h")
+    print("  Pacman:     ", sys.argv[0], "pacman_sprites pacman ../roms/pacman.5f ../main/arcade_core/games/pacman/pacman_spritemap.h")
+    print("  Donkey Kong:", sys.argv[0], "dkong_sprites dkong ../roms/l_4m_b.bin  ../roms/l_4n_b.bin  ../roms/l_4r_b.bin  ../roms/l_4s_b.bin ../main/arcade_core/games/dkong/dkong_spritemap.h")
+    print("  Frogger:    ", sys.argv[0], "frogger_sprites frogger ../roms/frogger.606 ../roms/frogger.607 ../main/arcade_core/games/frogger/frogger_spritemap.h")
+    print("  Digdug:     ", sys.argv[0], "digdug_sprites digdug ../roms/dd1.15 ../roms/dd1.14 ../roms/dd1.13 ../roms/dd1.12 ../main/arcade_core/games/digdug/digdug_spritemap.h")
+    print("  1942:       ", sys.argv[0], "_1942_sprites 1942 ../roms/sr-14.l1 ../roms/sr-15.l2 ../roms/sr-16.n1 ../roms/sr-17.n2 ../main/arcade_core/games/_1942/1942_spritemap.h")
     exit(-1)
 
 parse_spritemap(sys.argv[1], sys.argv[2], sys.argv[3:-1], sys.argv[-1])
+
 
