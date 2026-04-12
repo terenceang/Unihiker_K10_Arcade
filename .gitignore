@@ -75,5 +75,11 @@ ui_*.h
 # Vagrant
 .vagrant
 
+# Copyrighted content — ROM data, logos, audio samples
+# These must be generated locally using romconv/ tools
+main/arcade_core/games/
+logos/
+samples/*.s8
+
 # Reference code (not part of the project)
 galagino - for refernce only/*
