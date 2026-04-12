@@ -7,9 +7,9 @@
 // #define ENABLE_PACMAN
 // #define ENABLE_GALAGA
 // #define ENABLE_DKONG
-// #define ENABLE_FROGGER
+ #define ENABLE_FROGGER
 // #define ENABLE_DIGDUG
-#define ENABLE_1942
+//#define ENABLE_1942
 
 #ifdef ENABLE_PACMAN
 #define K10_ENABLE_COUNT_PACMAN 1

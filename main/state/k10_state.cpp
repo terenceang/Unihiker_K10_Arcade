@@ -1,7 +1,5 @@
 #include "k10_state.h"
 
-#include <string.h>
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 

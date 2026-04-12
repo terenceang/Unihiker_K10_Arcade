@@ -10,7 +10,6 @@
 #include "k10_input.h"
 #include <string.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -23,8 +22,10 @@
 
 static const char *TAG = "K10_WIFI";
 
-static k10_gamepad_state_t g_state = {0, 8, 0, 0, 0, 0, false};
-static SemaphoreHandle_t g_mutex = NULL;
+static const uint8_t kHatCenter = 8;
+
+static k10_gamepad_state_t g_state = {0, kHatCenter, 0, 0, 0, 0, false};
+static SemaphoreHandle_t g_mutex = nullptr;
 static bool g_wifi_init_started = false;
 
 // HTTP POST handler for /gamepad
@@ -153,20 +154,20 @@ static void k10_wifi_gamepad_init_task(void *parameter) {
 }
 
 void k10_wifi_gamepad_begin(void) {
-    if (g_mutex == NULL) {
+    if (g_mutex == nullptr) {
         g_mutex = xSemaphoreCreateMutex();
     }
     if (g_wifi_init_started) {
         return;
     }
     g_wifi_init_started = true;
-    xTaskCreatePinnedToCore(k10_wifi_gamepad_init_task, "k10_wifi_init", 8192, NULL, 1, NULL, 1);
+    xTaskCreatePinnedToCore(k10_wifi_gamepad_init_task, "k10_wifi_init", 8192, nullptr, 1, nullptr, 1);
 }
 
 void k10_wifi_gamepad_get_state(k10_gamepad_state_t *state) {
     if (!state || !g_mutex) return;
 
-    k10_gamepad_state_t default_state = {0, 8, 0, 0, 0, 0, false};
+    k10_gamepad_state_t default_state = {0, kHatCenter, 0, 0, 0, 0, false};
     *state = default_state;
 
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {

@@ -15,22 +15,22 @@ struct K10GameRuntimeConfig {
 
 static constexpr K10GameRuntimeConfig k10_game_runtime_configs[] = {
 #ifdef ENABLE_PACMAN
-    {K10_MACHINE_PACMAN, K10_TFT_SPICLK_PACMAN, false},
+    {K10_MACHINE_PACMAN, K10_TFT_SPICLK, false},
 #endif
 #ifdef ENABLE_GALAGA
-    {K10_MACHINE_GALAGA, K10_TFT_SPICLK_GALAGA, false},
+    {K10_MACHINE_GALAGA, K10_TFT_SPICLK, false},
 #endif
 #ifdef ENABLE_DKONG
-    {K10_MACHINE_DKONG, K10_TFT_SPICLK_DKONG, true},
+    {K10_MACHINE_DKONG, K10_TFT_SPICLK, true},
 #endif
 #ifdef ENABLE_FROGGER
-    {K10_MACHINE_FROGGER, K10_TFT_SPICLK_FROGGER, false},
+    {K10_MACHINE_FROGGER, K10_TFT_SPICLK, false},
 #endif
 #ifdef ENABLE_DIGDUG
-    {K10_MACHINE_DIGDUG, K10_TFT_SPICLK_DIGDUG, false},
+    {K10_MACHINE_DIGDUG, K10_TFT_SPICLK, false},
 #endif
 #ifdef ENABLE_1942
-    {K10_MACHINE_1942, K10_TFT_SPICLK_1942, false},
+    {K10_MACHINE_1942, K10_TFT_SPICLK, false},
 #endif
 };
 

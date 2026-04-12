@@ -1,6 +1,6 @@
 #include "k10_emulator.h"
 
-#include <esp_system.h>
+#include <esp_attr.h>
 #include <esp_heap_caps.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,8 +65,8 @@ constexpr uint32_t kFrameBytes = kFramePixels * sizeof(uint16_t);
 // The original arcade boards for the supported titles run at about 60 Hz,
 // so keep the present loop pinned to that cadence instead of speeding games up.
 constexpr uint64_t kFramePeriodUs = 16667;
-constexpr uint32_t kEmulationTaskStackWords = 4096;
-constexpr UBaseType_t kEmulationTaskPriority = 2;
+constexpr uint32_t kEmulationTaskStackWords = 8192;
+constexpr UBaseType_t kEmulationTaskPriority = 3;
 constexpr BaseType_t kEmulationTaskCore = 0;
 constexpr bool kEnableRuntimeProfiling = true;
 
@@ -96,7 +96,7 @@ int audio_toggle[2][4] = {{1,1,1,1},{1,1,1,1}};
 unsigned long ay_noise_rng[2] = {1, 1};
 #endif
 
-int16_t clamp_pcm16(int sample) {
+IRAM_ATTR int16_t clamp_pcm16(int sample) {
     if (sample > 32767) return 32767;
     if (sample < -32768) return -32768;
     return static_cast<int16_t>(sample);
@@ -109,7 +109,7 @@ inline void render_two_rows(RenderRowFn render_fn, short row0, short row1) {
     render_fn(row1);
 }
 
-void render_line_pair(short pair_row) {
+IRAM_ATTR void render_line_pair(short pair_row) {
     const short row0 = pair_row * 2;
     const short row1 = pair_row * 2 + 1;
 
@@ -146,7 +146,7 @@ _1942_END
 
 }
 
-void render_line(short strip_row) {
+IRAM_ATTR void render_line(short strip_row) {
     memset(frame_buffer, 0, kFrameBytes);
     unsigned short* const original_buffer = frame_buffer;
     constexpr int kPairPixels = K10_TFT_ACTIVE_WIDTH * 16;
@@ -223,19 +223,6 @@ void audio_namco_waveregs_parse_cpp() {
             ay_volume[0][c] = soundregs[8 + c] & 0x0f;
         }
         ay_period[0][3] = soundregs[6] & 0x1f;
-
-        static uint32_t last_log_ms = 0;
-        const uint32_t now_ms = k10_millis();
-        if (now_ms - last_log_ms >= 1000) {
-            printf("FROG AY r7=%02x v=%02x/%02x/%02x p=%u/%u/%u n=%u\n",
-                   soundregs[7],
-                   soundregs[8], soundregs[9], soundregs[10],
-                   static_cast<unsigned>(ay_period[0][0]),
-                   static_cast<unsigned>(ay_period[0][1]),
-                   static_cast<unsigned>(ay_period[0][2]),
-                   static_cast<unsigned>(ay_period[0][3]));
-            last_log_ms = now_ms;
-        }
         return;
     }
 #endif
@@ -261,7 +248,7 @@ void audio_namco_waveregs_parse_cpp() {
 #endif
 }
 
-void snd_render_buffer_cpp() {
+IRAM_ATTR void snd_render_buffer_cpp() {
     const int32_t vol_scale = (64 * AUDIO_VOLUME) / 100;
 
 #ifdef ENABLE_DKONG
@@ -493,7 +480,7 @@ void emulation_task(void* parameter) {
 
 bool ensure_runtime_allocations() {
     if (sprite == nullptr) {
-        sprite = static_cast<sprite_S*>(malloc(128 * sizeof(sprite_S)));
+        sprite = static_cast<sprite_S*>(heap_caps_malloc(128 * sizeof(sprite_S), MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL));
     }
     
     if (snd_buffer == nullptr) {
@@ -537,12 +524,12 @@ void teardown_emulation_task() {
     g_present_task = nullptr;
 
     if (memory != nullptr) {
-        free(memory);
+        heap_caps_free(memory);
         memory = nullptr;
     }
     
     if (snd_buffer != nullptr) {
-        free(snd_buffer);
+        heap_caps_free(snd_buffer);
         snd_buffer = nullptr;
     }
 
@@ -568,7 +555,7 @@ extern "C" void dkong_trigger_sound(char /*sound_index*/) {
 }
 #endif
 
-extern "C" unsigned char buttons_get(void) {
+extern "C" IRAM_ATTR unsigned char buttons_get(void) {
     return g_cached_buttons;
 }
 

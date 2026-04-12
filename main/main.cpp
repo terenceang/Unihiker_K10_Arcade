@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <string.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -112,9 +111,7 @@ static void k10_main_task(void* parameter) {
                 break;
         }
 
-        if (input_state != last_input_state) {
-            last_input_state = input_state;
-        }
+        last_input_state = input_state;
 
         if (!k10_state_in_menu() && k10_emulator_is_running()) {
             k10_emulator_run_frame(input_state);

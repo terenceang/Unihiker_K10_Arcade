@@ -9,8 +9,7 @@ extern unsigned char dkong_audio_transfer_buffer[DKONG_AUDIO_QUEUE_LEN][64];
 extern unsigned char dkong_audio_rptr, dkong_audio_wptr;
 #endif
 
-// a total of 7 button is needed for
-// most games
+// Button bitmask values — must match K10_BUTTON_* in hardware/k10_input.h.
 #define BUTTON_LEFT  0x01
 #define BUTTON_RIGHT 0x02
 #define BUTTON_UP    0x04

@@ -25,12 +25,6 @@
 // SPI wiring.
 #define K10_TFT_SPI_HOST SPI3_HOST
 #define K10_TFT_SPICLK 80000000
-#define K10_TFT_SPICLK_PACMAN 80000000
-#define K10_TFT_SPICLK_GALAGA 80000000
-#define K10_TFT_SPICLK_DKONG 80000000
-#define K10_TFT_SPICLK_FROGGER 80000000
-#define K10_TFT_SPICLK_DIGDUG 80000000
-#define K10_TFT_SPICLK_1942 80000000
 #define K10_TFT_MISO -1
 #define K10_TFT_MOSI 21
 #define K10_TFT_SCLK 12
@@ -55,7 +49,8 @@
 // Strip-based DMA rendering geometry.
 // Larger strips spend more DMA-capable RAM but reduce per-frame SPI/DMA overhead.
 // Keep this a multiple of 8 and an exact divisor of K10_TFT_ACTIVE_HEIGHT.
-#define K10_TFT_STRIP_HEIGHT 48
+// 96 = 3 strips per frame (vs 6 at 48), cutting DMA setup overhead in half.
+#define K10_TFT_STRIP_HEIGHT 96
 #define K10_TFT_STRIP_COUNT (K10_TFT_ACTIVE_HEIGHT / K10_TFT_STRIP_HEIGHT)
 
 // Global panel background color (RGB565, byte-swapped as used by the renderer).
