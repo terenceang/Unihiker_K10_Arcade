@@ -13,6 +13,7 @@ static const char *TAG = "K10_MAIN";
 #include "k10_idf.h"
 #include "k10_input.h"
 #include "k10_video.h"
+#include "config/k10_config.h"
 
 static uint8_t last_input_state = 0;
 static TaskHandle_t g_main_task = nullptr;
@@ -35,7 +36,7 @@ static void k10_main_task(void* parameter) {
     (void)parameter;
 
     printf("\n");
-    printf("Unihiker K10 Arcade\n");
+    printf("Unihiker K10 Arcade v" K10_VERSION "\n");
     printf("This project is the pure ESP-IDF arcade target.\n");
 
     k10_hw_init();

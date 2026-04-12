@@ -1,4 +1,4 @@
-# Unihiker K10 Arcade
+# Unihiker K10 Arcade v1.0.0
 
 Arcade emulator project for the [DFRobot](https://www.dfrobot.com/) [UNIHIKER K10](https://www.dfrobot.com/product-2823.html), built with [PlatformIO](https://platformio.org/) on top of [Espressif](https://www.espressif.com/)'s [ESP-IDF](https://github.com/espressif/esp-idf) framework.
 
