@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Classic arcade emulator for the **DFRobot UNIHIKER K10** (ESP32-S3), built with PlatformIO on top of ESP-IDF v5.4. ROM data is compiled directly into firmware as C headers. Currently ships with Galaga enabled by default.
+Classic arcade emulator for the **DFRobot UNIHIKER K10** (ESP32-S3), built with PlatformIO on top of ESP-IDF v5.4. ROM data is compiled directly into firmware as C headers. Ships with all six games enabled: Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug, and 1942.
 
 ## Build Commands
 
@@ -27,7 +27,7 @@ The codebase is layered:
 2. **State machine** (`k10_state.*`) — Owns menu navigation and game selection. `K10Machine` enum lists all supported games (MENU, PACMAN, GALAGA, DKONG, FROGGER, DIGDUG, 1942).
 3. **Emulator bridge** (`main/emulator/k10_emulator.*`) — Sits between the app and the emulation core; manages per-frame execution and game lifecycle.
 4. **Emulation core** (`main/arcade_core/emulation.c` + `main/arcade_core/config.h`) — Z80 CPU emulator and game-specific logic. Games are conditionally compiled via `#define ENABLE_*` macros.
-5. **Hardware drivers** — `main/hardware/k10_hardware.*` (I2C/I2S/XL9535 expander), `main/hardware/k10_video.*` (ILI9341 TFT via SPI, double-buffering), `main/state/k10_wifi_gamepad.cpp` (NimBLE BLE HID host for 8BitDo gamepads).
+5. **Hardware drivers** — `main/hardware/k10_hardware.*` (I2C/I2S/XL9535 expander), `main/hardware/k10_video.*` (ILI9341 TFT via SPI, zero-copy DMA double-buffering), `main/state/k10_wifi_gamepad.cpp` (WiFi AP + HTTP gamepad server).
 
 ### Key Configuration Files
 
@@ -38,7 +38,7 @@ The codebase is layered:
 | `main/state/k10_state.cpp` | Boot machine selection and menu flow |
 | `platformio.ini` | PlatformIO build environment for the `unihiker_k10_arcade` target |
 | `boards/unihiker_k10_arcade.json` | Custom PlatformIO board definition |
-| `sdkconfig.unihiker_k10_arcade` | ESP-IDF Kconfig (generated; do not edit manually) |
+| `sdkconfig.unihiker_k10_arcade` | ESP-IDF Kconfig — speed-tuned (240 MHz, QIO flash, -O2, 32 KB icache, 64 KB dcache) |
 
 ### Hardware Peripherals (K10 Board)
 
@@ -54,17 +54,35 @@ ROMs are embedded as C header arrays in `main/arcade_core/`. The `romconv/` dire
 ### Adding a New Game
 
 1. Convert ROM binaries using `romconv/` tools.
-2. Place resulting `.h` files in `main/arcade_core/`.
+2. Place resulting `.h` files in `main/arcade_core/games/<game>/`.
 3. Add an `#define ENABLE_<GAME>` guard in `arcade_core/config.h` and implement the machine logic in `emulation.c`.
 4. Add a `K10Machine` enum entry in `main/state/k10_state.h` and wire it into `main/state/k10_state.cpp` and `main/emulator/k10_emulator.cpp`.
+5. Add a `current_rom_base` case in the switch in `k10_emulator_start()` so `OpZ80_INL` fetches from the correct ROM.
 
 ### Input
 
 - Onboard buttons currently disabled (`K10_DISABLE_ONBOARD_BUTTONS=1`); input comes from BLE HID gamepad (8BitDo).
 - Virtual button bitmasks are defined in `main/hardware/k10_input.h` (UP/DOWN/LEFT/RIGHT/FIRE/START/COIN/EXTRA).
 
+### Performance Tuning
+
+The sdkconfig is tuned for speed over size:
+- CPU: 240 MHz (max), compiler: `-O2`
+- Flash: QIO mode (2× bandwidth vs DIO)
+- Instruction cache: 32 KB, data cache: 64 KB / 64-byte lines
+- SPI master driver placed in IRAM
+- Assertions disabled in production builds
+
+Hot rendering and audio functions are marked `IRAM_ATTR` for zero-wait execution.
+
 ### Audio Sample Rates
 
 Different games run at different rates configured per-machine in `k10_config.h`:
 - Galaga: 24 kHz
 - Donkey Kong: ~11.765 kHz
+
+### Known Gotchas
+
+- **`current_rom_base`**: `prepare_emulation()` sets this via a compile-time `#if` chain that picks only the first enabled game. `k10_emulator_start()` overrides it at runtime per-machine. Forgetting this for a new game causes it to execute the wrong ROM.
+- **Strip height limit**: `K10_TFT_STRIP_HEIGHT` × `K10_TFT_ACTIVE_WIDTH` × 2 must stay ≤ 32,767 bytes (ESP32-S3 SPI hardware max per transaction). Max valid strip height is 48.
+- **Zero-copy DMA**: `k10_video_write()` transmits directly from the caller's buffer (no staging copy). The buffer must be DMA-capable.

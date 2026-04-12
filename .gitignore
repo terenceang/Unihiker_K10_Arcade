@@ -1,22 +1,36 @@
 # esp-idf
 sdkconfig.old
 sdkconfig
+managed_components/
+dependencies.lock
 
-# misc
+# PlatformIO
 .pio/
 .pioenvs
 .clang_complete
 .gcc-flags.json
 
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude / AI
+.claude/
+
+# misc
+.DS_Store
+._.*
+
 # Ignore vim swaps
 *.swp
 *.swo
 
-# Distribution files, used internally and build files
+# Distribution files and build artifacts
 dist/
 build/
 cmake-build-*/
-build/
 
 # Xcode
 *.mode*v*
@@ -26,8 +40,6 @@ build/
 *.xcuserstate
 *.xccheckout
 xcschememanagement.plist
-.DS_Store
-._.*
 xcuserdata/
 DerivedData/
 
@@ -38,7 +50,7 @@ DerivedData/
 .gradle/
 .idea/
 
-# Qt-es
+# Qt
 /.qmake.cache
 /.qmake.stash
 *.pro.user
@@ -56,7 +68,12 @@ ui_*.h
 
 # Embedded build artifacts
 *.map
+*.elf
+*.bin
+*.hex
 
-# Vagrant stuff
+# Vagrant
 .vagrant
+
+# Reference code (not part of the project)
 galagino - for refernce only/*

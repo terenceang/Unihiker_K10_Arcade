@@ -1,6 +1,14 @@
 # Unihiker K10 Arcade - Button Mapping & Input Guide
 
-This document describes how the physical buttons on the Unihiker K10 are mapped to the arcade emulator's virtual inputs.
+This document describes how inputs are mapped to the arcade emulator's virtual buttons.
+
+## Input Sources
+
+The emulator supports multiple input sources:
+
+1. **WiFi Gamepad (Primary):** A phone-based gamepad served via WiFi AP + HTTP. The K10 creates an access point and serves a touch gamepad webpage. This provides full directional + button input.
+2. **BLE HID Gamepad:** 8BitDo or compatible Bluetooth gamepads via BLE HID.
+3. **Onboard Buttons (Disabled by default):** Physical buttons on the K10 board.
 
 ## Physical Hardware Layout
 
@@ -22,9 +30,10 @@ Because classic arcade games typically require more inputs (Joystick 4-way, Star
 | **BOOT (K1)** | `K10_BUTTON_EXTRA` | Currently Unmapped / Reserved |
 
 ### Directional Inputs
-The Unihiker K10 does **not** have a physical D-pad or Joystick. 
-- In the current build, movement is not mapped to physical buttons.
-- For games like Galaga, the logic is present in `k10_input.h` and `k10_state.cpp`, but there is no hardware trigger for `LEFT`, `RIGHT`, `UP`, or `DOWN`.
+The Unihiker K10 does **not** have a physical D-pad or Joystick.
+- Directional input comes from the WiFi gamepad or a BLE HID gamepad.
+- Onboard buttons alone cannot provide movement.
+- The virtual button bitmasks for `UP`, `DOWN`, `LEFT`, `RIGHT` are defined in `main/hardware/k10_input.h`.
 
 ## Software Configuration
 

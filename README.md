@@ -1,6 +1,6 @@
 # Unihiker K10 Arcade
 
-Arcade emulator project for the DFRobot UNIHIKER K10, built with PlatformIO on top of the ESP-IDF framework.
+Arcade emulator project for the [DFRobot](https://www.dfrobot.com/) [UNIHIKER K10](https://www.dfrobot.com/product-2823.html), built with [PlatformIO](https://platformio.org/) on top of [Espressif](https://www.espressif.com/)'s [ESP-IDF](https://github.com/espressif/esp-idf) framework.
 
 Author: Terence Ang
 
@@ -25,11 +25,15 @@ The codebase separates board support, video, audio, input handling, and the emul
 
 ## Features
 
+- Six arcade machines in one firmware: Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug, and 1942
 - Multi-machine emulator build controlled by compile-time `ENABLE_*` flags
-- Double-buffered frame presentation to the TFT display
-- I2S audio playback for arcade sound generation
+- Zero-copy DMA double-buffered frame presentation to the TFT display
+- Strip-based rendering (48-pixel strips) within ESP32-S3 SPI hardware limits
+- I2S audio playback for arcade sound generation (Namco WSG, AY-3-8910, DK PCM)
 - XL9535-based onboard button and backlight handling
-- App-level menu flow with persisted last selection and idle random-launch
+- WiFi AP gamepad server for phone-based control
+- App-level menu flow with NVS-persisted last selection and idle random-launch
+- FreeRTOS dual-core: emulation on core 0, rendering/present on core 1
 
 ## Hardware Notes
 
@@ -150,13 +154,49 @@ At the moment:
 - Default machine fallback is `K10_MACHINE_GALAGA`
 - Menu idle-launch timeout is enabled (`MASTER_ATTRACT_MENU_TIMEOUT` in `main/arcade_core/config.h`)
 
+## Performance Tuning
+
+The `sdkconfig.unihiker_k10_arcade` is tuned for speed over size:
+
+| Setting | Value |
+|---------|-------|
+| CPU frequency | 240 MHz |
+| Compiler optimization | `-O2` (performance) |
+| Flash mode | QIO (2× bandwidth vs DIO) |
+| Instruction cache | 32 KB |
+| Data cache | 64 KB / 64-byte lines |
+| SPI master driver | Placed in IRAM |
+| Assertions | Disabled |
+
+Hot rendering and audio functions are marked `IRAM_ATTR` for zero-wait execution from internal RAM.
+
 ## Notes for Development
 
-- Additional games require emulator support plus ROM/header integration under `main/arcade_core/`
+- Additional games require emulator support plus ROM/header integration under `main/arcade_core/games/<game>/`
+- New games must add a `current_rom_base` case in `k10_emulator_start()` — `prepare_emulation()` uses a compile-time `#if` chain that only picks the first enabled game; the runtime switch overrides it
+- Strip height × width × 2 must not exceed 32,767 bytes (ESP32-S3 SPI hardware max per transaction)
+- Zero-copy DMA: `k10_video_write()` transmits directly from the caller's buffer (must be DMA-capable)
 - Hardware bring-up, audio timing, and display timing are tuned specifically for the K10 target
 
-## Credits
+## Credits & Attribution
 
-- Author: Terence Ang
-- Code reference: Galadino
-- Platform foundation: ESP-IDF and PlatformIO
+- **Author:** Terence Ang
+- **Based on:** [Galagino](https://github.com/harbaum/galagino) by Till Harbaum — a multi-arcade emulator for ESP32
+- **Platform:** [ESP-IDF](https://github.com/espressif/esp-idf) v5.4 by [Espressif](https://www.espressif.com/) and [PlatformIO](https://platformio.org/)
+- **Emulation core:** Z80 CPU emulator and game-specific logic derived from Galagino
+- **Original arcade games:** Pac-Man (Namco), Galaga (Namco), Donkey Kong (Nintendo), Frogger (Konami/Sega), Dig Dug (Namco), 1942 (Capcom). All trademarks are property of their respective owners. No ROM files are included in this repository.
+
+## License
+
+This project is licensed under the **GNU General Public License v3.0 (GPLv3)**, the same license as the original [Galagino](https://github.com/harbaum/galagino) project by Till Harbaum.
+
+See [LICENSE](LICENSE) for the full license text.
+
+### Summary
+
+- You are free to use, modify, and distribute this software.
+- Any derivative work must also be released under GPLv3.
+- The source code must be made available when distributing the software.
+- No warranty is provided.
+
+ROM images are **not** included and are the property of their respective copyright holders.

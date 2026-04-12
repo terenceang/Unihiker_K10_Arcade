@@ -22,6 +22,11 @@ static const char *TAG = "K10_STATE";
 // Change this value to adjust the delay.
 #define K10_IDLE_LAUNCH_TIMEOUT_MS  30000
 
+// ── Attract rotation ───────────────────────────────────────────────────────────
+// When a game was idle-launched (no user selection), return to the menu after
+// this many milliseconds and let the idle timer pick another random game.
+#define K10_ATTRACT_ROTATE_MS  60000
+
 // ── NVS persistence ────────────────────────────────────────────────────────────
 static const char *kNvsNamespace = "k10_state";
 static const char *kNvsKeyLastSel = "last_sel";
@@ -56,6 +61,11 @@ int        g_menu_index = 0;
 // Idle-launch timer state
 uint32_t   g_last_input_ms  = 0;   // time of last button activity in menu
 bool       g_idle_active    = false;   // true while the idle countdown is running
+
+// Attract rotation: when true the current game was auto-launched (not user-selected)
+// and should rotate to another random game after K10_ATTRACT_ROTATE_MS.
+bool       g_idle_launched  = false;
+uint32_t   g_game_start_ms  = 0;
 
 // Single-game restart guard: require a deliberate hold and enforce cooldown
 // so gameplay button chatter doesn't repeatedly restart and flicker the screen.
@@ -201,6 +211,8 @@ K10StateEvent k10_state_handle_input(uint8_t input_state, uint8_t last_input_sta
             pressed(input_state, last_input_state, K10_BUTTON_START) ||
             pressed(input_state, last_input_state, K10_BUTTON_COIN)) {
             g_idle_active = false;
+            g_idle_launched = false;
+            g_game_start_ms = now_ms();
             return launch_current_selection();
         }
 
@@ -218,6 +230,8 @@ K10StateEvent k10_state_handle_input(uint8_t input_state, uint8_t last_input_sta
                     pick = (pick + 1) % count;
                 }
                 g_menu_index = pick;
+                g_idle_launched = true;
+                g_game_start_ms = now_ms();
                 ESP_LOGI(TAG, "Idle timeout — launching random game: %s",
                          k10_video_menu_name(g_menu_index));
                 return launch_current_selection();
@@ -225,6 +239,22 @@ K10StateEvent k10_state_handle_input(uint8_t input_state, uint8_t last_input_sta
         }
 
         return K10_STATE_EVENT_NONE;
+    }
+
+    // ── Attract rotation: auto-launched games cycle back to menu ───────────────
+    if (g_idle_launched) {
+        // Any user input while in attract mode claims the game (stop rotating)
+        if (input_state != 0) {
+            g_idle_launched = false;
+        } else if ((now_ms() - g_game_start_ms) >= K10_ATTRACT_ROTATE_MS) {
+            ESP_LOGI(TAG, "Attract rotate — returning to menu");
+            g_idle_launched = false;
+            g_machine = K10_MACHINE_MENU;
+            k10_audio_set_dkong_rate(false);
+            reset_idle_timer();
+            render_current_view();
+            return K10_STATE_EVENT_RETURNED_TO_MENU;
+        }
     }
 
     // ── In-game: return-to-menu combos ────────────────────────────────────────
