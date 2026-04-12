@@ -462,9 +462,9 @@ _1942_END
     }
 
 #ifdef ENABLE_GALAGA
-GALAGA_BEGIN
-    stars_scroll_y += 2 * star_speeds[starcontrol & 7];
-GALAGA_END
+    if (MACHINE_IS_GALAGA) {
+        stars_scroll_y += 2 * star_speeds[starcontrol & 7];
+    }
 #endif
 }
 
@@ -587,6 +587,8 @@ bool k10_emulator_start(K10Machine machine) {
         return false;
     }
 
+    k10_video_clear_border();
+
     reset_audio_state();
     game_started = 0;
     g_cached_buttons = 0;
@@ -597,6 +599,31 @@ bool k10_emulator_start(K10Machine machine) {
 #ifndef SINGLE_MACHINE
     ::machine = (signed char)machine;
 #endif
+
+    // OpZ80_INL() in Z80.c uses current_rom_base for fast instruction fetch.
+    // prepare_emulation() sets it via a compile-time #if chain that always
+    // picks the first enabled game.  Override it here for the actual machine.
+    switch (machine) {
+#ifdef ENABLE_PACMAN
+        case K10_MACHINE_PACMAN:  current_rom_base = pacman_rom; break;
+#endif
+#ifdef ENABLE_GALAGA
+        case K10_MACHINE_GALAGA:  current_rom_base = galaga_rom_cpu1; break;
+#endif
+#ifdef ENABLE_DKONG
+        case K10_MACHINE_DKONG:   current_rom_base = dkong_rom_cpu1; break;
+#endif
+#ifdef ENABLE_FROGGER
+        case K10_MACHINE_FROGGER: current_rom_base = frogger_rom_cpu1; break;
+#endif
+#ifdef ENABLE_DIGDUG
+        case K10_MACHINE_DIGDUG:  current_rom_base = digdug_rom_cpu1; break;
+#endif
+#ifdef ENABLE_1942
+        case K10_MACHINE_1942:   current_rom_base = _1942_rom_cpu1; break;
+#endif
+        default: break;
+    }
 
     // Match the reference startup behavior: parse registers and pre-render one
     // audio chunk so playback begins immediately once DMA accepts writes.

@@ -515,6 +515,59 @@ void clear_panel(uint16_t color) {
     write_gpio(K10_TFT_CS, 1);
 }
 
+// Paint the border strips (area outside the 224×288 active window) black.
+// Uses the first frame buffer as a scratch row — safe because we flush DMA first.
+static void clear_border() {
+    flush_dma();
+    uint16_t* row = g_frame_buffers[0];
+    if (!row) return;
+
+    const uint16_t bg = static_cast<uint16_t>((kPanelBackground >> 8) | (kPanelBackground << 8));
+
+    // Top border: rows 0..(Y_OFFSET-1), full panel width
+    write_gpio(K10_TFT_CS, 0);
+    set_addr_window(0, 0, K10_TFT_WIDTH, K10_TFT_Y_OFFSET);
+    for (int i = 0; i < K10_TFT_WIDTH; ++i) row[i] = bg;
+    for (int r = 0; r < K10_TFT_Y_OFFSET; ++r)
+        k10_video_write(row, K10_TFT_WIDTH);
+    flush_dma();
+    write_gpio(K10_TFT_CS, 1);
+
+    // Bottom border: rows (Y_OFFSET+ACTIVE_HEIGHT)..319
+    constexpr int bot_start = K10_TFT_Y_OFFSET + K10_TFT_ACTIVE_HEIGHT;
+    constexpr int bot_rows  = K10_TFT_HEIGHT - bot_start;
+    if (bot_rows > 0) {
+        write_gpio(K10_TFT_CS, 0);
+        set_addr_window(0, bot_start, K10_TFT_WIDTH, bot_rows);
+        for (int r = 0; r < bot_rows; ++r)
+            k10_video_write(row, K10_TFT_WIDTH);
+        flush_dma();
+        write_gpio(K10_TFT_CS, 1);
+    }
+
+    // Left border: X_OFFSET pixels wide, active height
+    if (K10_TFT_X_OFFSET > 0) {
+        write_gpio(K10_TFT_CS, 0);
+        set_addr_window(0, K10_TFT_Y_OFFSET, K10_TFT_X_OFFSET, K10_TFT_ACTIVE_HEIGHT);
+        for (int r = 0; r < K10_TFT_ACTIVE_HEIGHT; ++r)
+            k10_video_write(row, K10_TFT_X_OFFSET);
+        flush_dma();
+        write_gpio(K10_TFT_CS, 1);
+    }
+
+    // Right border
+    constexpr int right_start = K10_TFT_X_OFFSET + K10_TFT_ACTIVE_WIDTH;
+    constexpr int right_cols  = K10_TFT_WIDTH - right_start;
+    if (right_cols > 0) {
+        write_gpio(K10_TFT_CS, 0);
+        set_addr_window(right_start, K10_TFT_Y_OFFSET, right_cols, K10_TFT_ACTIVE_HEIGHT);
+        for (int r = 0; r < K10_TFT_ACTIVE_HEIGHT; ++r)
+            k10_video_write(row, right_cols);
+        flush_dma();
+        write_gpio(K10_TFT_CS, 1);
+    }
+}
+
 }  // namespace
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -609,6 +662,11 @@ bool k10_video_set_machine_clock(K10Machine machine) {
 
     g_current_spi_clock_hz = new_clock_hz;
     return true;
+}
+
+void k10_video_clear_border() {
+    if (!g_video_ready && !k10_video_begin()) return;
+    clear_border();
 }
 
 void k10_video_begin_frame() {

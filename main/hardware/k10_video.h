@@ -14,6 +14,9 @@ void k10_video_end_frame();
 // Returns the currently available buffer for drawing.
 uint16_t* k10_video_get_draw_buffer();
 
+// Clear the border area (outside 224×288) to black.
+void k10_video_clear_border();
+
 // Menu and UI rendering.
 void k10_video_draw_menu_frame(int selection);
 void k10_video_draw_machine_frame(int machine);

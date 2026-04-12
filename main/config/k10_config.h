@@ -48,9 +48,10 @@
 
 // Strip-based DMA rendering geometry.
 // Larger strips spend more DMA-capable RAM but reduce per-frame SPI/DMA overhead.
-// Keep this a multiple of 8 and an exact divisor of K10_TFT_ACTIVE_HEIGHT.
-// 96 = 3 strips per frame (vs 6 at 48), cutting DMA setup overhead in half.
-#define K10_TFT_STRIP_HEIGHT 96
+// Keep this a multiple of 16 and an exact divisor of K10_TFT_ACTIVE_HEIGHT.
+// Max strip size is limited by ESP32-S3 SPI hardware: 262143 bits (~32 KB).
+// 48 is the largest valid value (224*48*2 = 21504 bytes < 32767).
+#define K10_TFT_STRIP_HEIGHT 48
 #define K10_TFT_STRIP_COUNT (K10_TFT_ACTIVE_HEIGHT / K10_TFT_STRIP_HEIGHT)
 
 // Global panel background color (RGB565, byte-swapped as used by the renderer).
