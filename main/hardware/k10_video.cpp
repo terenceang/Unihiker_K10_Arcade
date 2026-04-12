@@ -15,6 +15,7 @@
 #include "arcade_core/games/digdug/digdug_logo.h"
 #include "arcade_core/games/_1942/1942_logo.h"
 
+#include "config/k10_game_registry.h"
 #include "k10_config.h"
 #include "k10_hardware.h"
 #include "k10_idf.h"
@@ -76,30 +77,6 @@ const MenuEntry g_menu_entries[] = {
 };
 
 constexpr size_t kMenuEntryCount = sizeof(g_menu_entries) / sizeof(g_menu_entries[0]);
-
-uint32_t spi_clock_for_machine(K10Machine machine) {
-    switch (machine) {
-#ifdef ENABLE_PACMAN
-    case K10_MACHINE_PACMAN: return K10_TFT_SPICLK_PACMAN;
-#endif
-#ifdef ENABLE_GALAGA
-    case K10_MACHINE_GALAGA: return K10_TFT_SPICLK_GALAGA;
-#endif
-#ifdef ENABLE_DKONG
-    case K10_MACHINE_DKONG: return K10_TFT_SPICLK_DKONG;
-#endif
-#ifdef ENABLE_FROGGER
-    case K10_MACHINE_FROGGER: return K10_TFT_SPICLK_FROGGER;
-#endif
-#ifdef ENABLE_DIGDUG
-    case K10_MACHINE_DIGDUG: return K10_TFT_SPICLK_DIGDUG;
-#endif
-#ifdef ENABLE_1942
-    case K10_MACHINE_1942: return K10_TFT_SPICLK_1942;
-#endif
-    default: return K10_TFT_SPICLK;
-    }
-}
 
 // ── Logo row cache ────────────────────────────────────────────────────────────
 //
@@ -605,7 +582,7 @@ bool k10_video_begin() {
 }
 
 bool k10_video_set_machine_clock(K10Machine machine) {
-    const uint32_t new_clock_hz = spi_clock_for_machine(machine);
+    const uint32_t new_clock_hz = k10_machine_spi_clock_hz(machine);
     if (new_clock_hz == g_current_spi_clock_hz) return true;
 
     g_if_cfg.clock_speed_hz = new_clock_hz;

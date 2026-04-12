@@ -19,6 +19,8 @@ extern "C" {
 struct Z80;
 }
 
+#include "config/k10_game_registry.h"
+
 struct sprite_S {
     unsigned char code;
     unsigned char color;
@@ -85,7 +87,7 @@ unsigned char snd_volume[3] = {0, 0, 0};
 
 int16_t* snd_buffer = nullptr;
 
-#ifdef ENABLE_1942
+#if defined(ENABLE_FROGGER) || defined(ENABLE_1942)
 int ay_period[2][4]    = {{0,0,0,0},{0,0,0,0}};
 int ay_volume[2][3]    = {{0,0,0},{0,0,0}};
 int ay_enable[2][3]    = {{0,0,0},{0,0,0}};
@@ -213,6 +215,30 @@ void audio_namco_waveregs_parse_cpp() {
 #ifdef ENABLE_PACMAN
     if (MACHINE_IS_PACMAN) { audio_pacman_waveregs_parse(); return; }
 #endif
+#ifdef ENABLE_FROGGER
+    if (MACHINE_IS_FROGGER) {
+        for (int c = 0; c < 3; ++c) {
+            ay_period[0][c] = soundregs[2*c] + 256 * (soundregs[2*c + 1] & 15);
+            ay_enable[0][c] = (((soundregs[7] >> c) & 1) | ((soundregs[7] >> (c+2)) & 2)) ^ 3;
+            ay_volume[0][c] = soundregs[8 + c] & 0x0f;
+        }
+        ay_period[0][3] = soundregs[6] & 0x1f;
+
+        static uint32_t last_log_ms = 0;
+        const uint32_t now_ms = k10_millis();
+        if (now_ms - last_log_ms >= 1000) {
+            printf("FROG AY r7=%02x v=%02x/%02x/%02x p=%u/%u/%u n=%u\n",
+                   soundregs[7],
+                   soundregs[8], soundregs[9], soundregs[10],
+                   static_cast<unsigned>(ay_period[0][0]),
+                   static_cast<unsigned>(ay_period[0][1]),
+                   static_cast<unsigned>(ay_period[0][2]),
+                   static_cast<unsigned>(ay_period[0][3]));
+            last_log_ms = now_ms;
+        }
+        return;
+    }
+#endif
 #ifdef ENABLE_1942
     if (MACHINE_IS_1942) {
         for (int ay = 0; ay < 2; ++ay) {
@@ -238,13 +264,61 @@ void audio_namco_waveregs_parse_cpp() {
 void snd_render_buffer_cpp() {
     const int32_t vol_scale = (64 * AUDIO_VOLUME) / 100;
 
-#ifdef ENABLE_1942
-    if (MACHINE_IS_1942) {
-        constexpr int AY_INC = 8;
-        constexpr int AY_VOL = 4;
+#ifdef ENABLE_DKONG
+    if (MACHINE_IS_DKONG) {
+        constexpr int32_t kDkongPcmScale = 256;
+        const bool has_queue_data = dkong_audio_rptr != dkong_audio_wptr;
         for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
             int32_t value = 0;
-            for (int ay = 0; ay < 2; ++ay) {
+
+            if (has_queue_data) {
+                // DK audio CPU emits 64-byte chunks. Mirror the legacy path by
+                // duplicating each byte to fill the current audio frame size.
+                const int source_index = (index >> 1) & 0x3f;
+                const int raw = dkong_audio_transfer_buffer[dkong_audio_rptr][source_index];
+                value = (raw - 128) * kDkongPcmScale;
+            }
+
+            value = (value * AUDIO_VOLUME) / 100;
+            const int16_t sample = clamp_pcm16(value);
+            snd_buffer[2 * index] = sample;
+            snd_buffer[2 * index + 1] = sample;
+        }
+
+        if (has_queue_data) {
+            dkong_audio_rptr = (dkong_audio_rptr + 1) & DKONG_AUDIO_QUEUE_MASK;
+        }
+        return;
+    }
+#endif
+
+#if defined(ENABLE_FROGGER) || defined(ENABLE_1942)
+    if (
+#ifdef ENABLE_FROGGER
+        MACHINE_IS_FROGGER ||
+#endif
+#ifdef ENABLE_1942
+        MACHINE_IS_1942 ||
+#endif
+        false) {
+        const int ay_chip_count =
+#ifdef ENABLE_1942
+            MACHINE_IS_1942 ? 2 :
+#endif
+            1;
+        const int AY_INC =
+    #ifdef ENABLE_FROGGER
+            MACHINE_IS_FROGGER ? 9 :
+    #endif
+            8;
+        const int AY_VOL =
+    #ifdef ENABLE_FROGGER
+            MACHINE_IS_FROGGER ? 11 :
+    #endif
+            10;
+        for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
+            int32_t value = 0;
+            for (int ay = 0; ay < ay_chip_count; ++ay) {
                 if (ay_period[ay][3]) {
                     audio_cnt[ay][3] += AY_INC;
                     if (audio_cnt[ay][3] > ay_period[ay][3]) {
@@ -439,7 +513,11 @@ void reset_audio_state() {
     }
     snd_boom_cnt = 0;
     snd_boom_ptr = nullptr;
-#ifdef ENABLE_1942
+#ifdef ENABLE_DKONG
+    dkong_audio_rptr = 0;
+    dkong_audio_wptr = 0;
+#endif
+#if defined(ENABLE_FROGGER) || defined(ENABLE_1942)
     memset(ay_period,  0, sizeof(ay_period));
     memset(ay_volume,  0, sizeof(ay_volume));
     memset(ay_enable,  0, sizeof(ay_enable));
@@ -504,27 +582,7 @@ extern "C" unsigned short LoopZ80(Z80* cpu_state) {
 }
 
 bool k10_emulator_supports_machine(K10Machine machine) {
-    switch (machine) {
-#ifdef ENABLE_PACMAN
-        case K10_MACHINE_PACMAN: return true;
-#endif
-#ifdef ENABLE_GALAGA
-        case K10_MACHINE_GALAGA: return true;
-#endif
-#ifdef ENABLE_DKONG
-        case K10_MACHINE_DKONG: return true;
-#endif
-#ifdef ENABLE_FROGGER
-        case K10_MACHINE_FROGGER: return true;
-#endif
-#ifdef ENABLE_DIGDUG
-        case K10_MACHINE_DIGDUG: return true;
-#endif
-#ifdef ENABLE_1942
-        case K10_MACHINE_1942: return true;
-#endif
-        default: return false;
-    }
+    return k10_machine_is_enabled(machine);
 }
 
 bool k10_emulator_start(K10Machine machine) {
@@ -552,6 +610,11 @@ bool k10_emulator_start(K10Machine machine) {
 #ifndef SINGLE_MACHINE
     ::machine = (signed char)machine;
 #endif
+
+    // Match the reference startup behavior: parse registers and pre-render one
+    // audio chunk so playback begins immediately once DMA accepts writes.
+    audio_namco_waveregs_parse_cpp();
+    snd_render_buffer_cpp();
 
     const BaseType_t task_ok = xTaskCreatePinnedToCore(emulation_task, "emulation task", kEmulationTaskStackWords,
                                                        nullptr, kEmulationTaskPriority, &g_emulation_task,

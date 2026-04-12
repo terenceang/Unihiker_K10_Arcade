@@ -69,6 +69,15 @@ void prepare_emulation(void) {
   sub_cpu_reset = 1;
 #endif
 
+#ifdef ENABLE_FROGGER
+  // Reset Frogger audio-side latches/counters so stale state from previous
+  // sessions cannot block sound IRQ sequencing on CPU2.
+  frogger_snd_irq_state = 0;
+  frogger_snd_command = 0;
+  frogger_snd_ay_port = 0;
+  frogger_snd_icnt = 0;
+#endif
+
 #ifdef ENABLE_1942
   // Reset 1942-specific hardware registers to their power-on state.
   // These are global variables that persist between game sessions, so they

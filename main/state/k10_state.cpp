@@ -14,6 +14,7 @@
 #include "k10_video.h"
 
 #include "arcade_core/config.h"
+#include "config/k10_game_registry.h"
 
 static const char *TAG = "K10_STATE";
 
@@ -49,21 +50,7 @@ static void nvs_save_last_selection(int idx) {
 
 namespace {
 
-#ifdef ENABLE_GALAGA
-constexpr K10Machine kDefaultMachine = K10_MACHINE_GALAGA;
-#elif defined(ENABLE_PACMAN)
-constexpr K10Machine kDefaultMachine = K10_MACHINE_PACMAN;
-#elif defined(ENABLE_DKONG)
-constexpr K10Machine kDefaultMachine = K10_MACHINE_DKONG;
-#elif defined(ENABLE_FROGGER)
-constexpr K10Machine kDefaultMachine = K10_MACHINE_FROGGER;
-#elif defined(ENABLE_DIGDUG)
-constexpr K10Machine kDefaultMachine = K10_MACHINE_DIGDUG;
-#elif defined(ENABLE_1942)
-constexpr K10Machine kDefaultMachine = K10_MACHINE_1942;
-#else
-constexpr K10Machine kDefaultMachine = K10_MACHINE_MENU;
-#endif
+constexpr K10Machine kDefaultMachine = k10_default_enabled_machine();
 
 K10Machine g_machine   = K10_MACHINE_MENU;
 int        g_menu_index = 0;
@@ -97,10 +84,6 @@ bool pressed(uint8_t input_state, uint8_t last_input_state, uint8_t mask) {
     return (input_state & mask) != 0 && (last_input_state & mask) == 0;
 }
 
-bool machine_uses_dkong_rate(K10Machine machine) {
-    return machine == K10_MACHINE_DKONG;
-}
-
 void render_current_view() {
     if (g_machine == K10_MACHINE_MENU) {
         k10_video_draw_menu_frame(g_menu_index);
@@ -118,7 +101,7 @@ void reset_idle_timer() {
 // Launch the game at g_menu_index and persist the selection.
 K10StateEvent launch_current_selection() {
     g_machine = k10_video_menu_machine(g_menu_index);
-    k10_audio_set_dkong_rate(machine_uses_dkong_rate(g_machine));
+    k10_audio_set_dkong_rate(k10_machine_uses_dkong_audio_rate(g_machine));
     nvs_save_last_selection(g_menu_index);
     render_current_view();
     return K10_STATE_EVENT_LAUNCHED;
@@ -153,7 +136,7 @@ bool k10_state_boot() {
     }
 
     g_machine = single_mode ? kDefaultMachine : K10_MACHINE_MENU;
-    k10_audio_set_dkong_rate(machine_uses_dkong_rate(g_machine));
+    k10_audio_set_dkong_rate(k10_machine_uses_dkong_audio_rate(g_machine));
     reset_idle_timer();
     if (!single_mode) {
         render_current_view();
