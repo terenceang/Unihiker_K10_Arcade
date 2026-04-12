@@ -24,7 +24,7 @@
 
 // SPI wiring.
 #define K10_TFT_SPI_HOST SPI3_HOST
-#define K10_TFT_SPICLK 80000000
+#define K10_TFT_SPICLK 60000000
 #define K10_TFT_MISO -1
 #define K10_TFT_MOSI 21
 #define K10_TFT_SCLK 12

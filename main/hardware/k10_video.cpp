@@ -39,6 +39,7 @@ spi_transaction_t   g_transactions[2] = {};
 bool                g_buffer_in_use[2] = {false, false};
 bool                g_video_ready    = false;
 uint16_t*           g_frame_buffers[2] = {nullptr, nullptr};
+uint16_t*           g_dma_staging_buffer = nullptr;
 uint8_t             g_buffer_index   = 0;
 int                 g_in_flight_count = 0;
 bool                g_dma_active     = false;
@@ -558,7 +559,9 @@ bool k10_video_begin() {
         K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT * sizeof(uint16_t), MALLOC_CAP_DMA));
     g_frame_buffers[1] = static_cast<uint16_t*>(heap_caps_malloc(
         K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT * sizeof(uint16_t), MALLOC_CAP_DMA));
-    if (!g_frame_buffers[0] || !g_frame_buffers[1]) {
+    g_dma_staging_buffer = static_cast<uint16_t*>(heap_caps_malloc(
+        K10_TFT_ACTIVE_WIDTH * K10_TFT_STRIP_HEIGHT * sizeof(uint16_t), MALLOC_CAP_DMA));
+    if (!g_frame_buffers[0] || !g_frame_buffers[1] || !g_dma_staging_buffer) {
         printf("Video: frame buffer allocation failed\n");
         return false;
     }
@@ -586,10 +589,20 @@ void k10_video_begin_frame() {
 void k10_video_write(const uint16_t* colors, uint32_t len) {
     if (!g_video_ready) return;
 
+    // Match reference pacing: keep at most one queued DMA transfer.
+    // This reduces visible shimmer/tearing on fast-moving scenes.
+    if (g_in_flight_count > 0) {
+        spi_transaction_t* completed = nullptr;
+        spi_device_get_trans_result(g_tft_handle, &completed, portMAX_DELAY);
+        mark_buffer_complete(completed);
+        g_in_flight_count--;
+    }
+
     int trans_idx = g_buffer_index;
     memset(&g_transactions[trans_idx], 0, sizeof(spi_transaction_t));
     g_transactions[trans_idx].length    = len * 16;
-    g_transactions[trans_idx].tx_buffer = colors;
+    memcpy(g_dma_staging_buffer, colors, len * sizeof(uint16_t));
+    g_transactions[trans_idx].tx_buffer = g_dma_staging_buffer;
 
     spi_device_queue_trans(g_tft_handle, &g_transactions[trans_idx], portMAX_DELAY);
     g_buffer_in_use[trans_idx] = true;

@@ -53,6 +53,14 @@ namespace {
 constexpr K10Machine kDefaultMachine = K10_MACHINE_GALAGA;
 #elif defined(ENABLE_PACMAN)
 constexpr K10Machine kDefaultMachine = K10_MACHINE_PACMAN;
+#elif defined(ENABLE_DKONG)
+constexpr K10Machine kDefaultMachine = K10_MACHINE_DKONG;
+#elif defined(ENABLE_FROGGER)
+constexpr K10Machine kDefaultMachine = K10_MACHINE_FROGGER;
+#elif defined(ENABLE_DIGDUG)
+constexpr K10Machine kDefaultMachine = K10_MACHINE_DIGDUG;
+#elif defined(ENABLE_1942)
+constexpr K10Machine kDefaultMachine = K10_MACHINE_1942;
 #else
 constexpr K10Machine kDefaultMachine = K10_MACHINE_MENU;
 #endif
@@ -64,12 +72,25 @@ int        g_menu_index = 0;
 uint32_t   g_last_input_ms  = 0;   // time of last button activity in menu
 bool       g_idle_active    = false;   // true while the idle countdown is running
 
+// Single-game restart guard: require a deliberate hold and enforce cooldown
+// so gameplay button chatter doesn't repeatedly restart and flicker the screen.
+uint32_t   g_restart_combo_start_ms = 0;
+uint32_t   g_last_restart_ms = 0;
+bool       g_restart_combo_latched = false;
+
+constexpr uint32_t kRestartHoldMs = 500;
+constexpr uint32_t kRestartCooldownMs = 1500;
+
 static uint32_t now_ms() {
     return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
 }
 
 bool single_game_mode_enabled() {
+#ifdef SINGLE_MACHINE
+    return true;
+#else
     return false;
+#endif
 }
 
 bool pressed(uint8_t input_state, uint8_t last_input_state, uint8_t mask) {
@@ -110,8 +131,10 @@ K10StateEvent launch_current_selection() {
 bool k10_state_boot() {
     if (!k10_video_begin()) return false;
 
+    const bool single_mode = single_game_mode_enabled();
+
     // Restore last selection from NVS; fall back to the compiled default.
-    int saved = nvs_load_last_selection();
+    int saved = single_mode ? -1 : nvs_load_last_selection();
     int count = k10_video_menu_count();
 
     if (saved >= 0 && saved < count) {
@@ -129,18 +152,40 @@ bool k10_state_boot() {
         }
     }
 
-    g_machine = single_game_mode_enabled() ? kDefaultMachine : K10_MACHINE_MENU;
+    g_machine = single_mode ? kDefaultMachine : K10_MACHINE_MENU;
     k10_audio_set_dkong_rate(machine_uses_dkong_rate(g_machine));
     reset_idle_timer();
-    render_current_view();
+    if (!single_mode) {
+        render_current_view();
+    }
     return true;
 }
 
 K10StateEvent k10_state_handle_input(uint8_t input_state, uint8_t last_input_state) {
     // ── Single-game mode: only restart combo matters ──────────────────────────
     if (single_game_mode_enabled() && g_machine != K10_MACHINE_MENU) {
-        if ((input_state & K10_BUTTON_START) && (input_state & K10_BUTTON_COIN) &&
-            !((last_input_state & K10_BUTTON_START) && (last_input_state & K10_BUTTON_COIN))) {
+        const bool combo_now = (input_state & K10_BUTTON_START) && (input_state & K10_BUTTON_COIN);
+        const uint32_t now = now_ms();
+
+        if (!combo_now) {
+            g_restart_combo_start_ms = 0;
+            g_restart_combo_latched = false;
+            return K10_STATE_EVENT_NONE;
+        }
+
+        if (g_restart_combo_start_ms == 0) {
+            g_restart_combo_start_ms = now;
+            return K10_STATE_EVENT_NONE;
+        }
+
+        if (g_restart_combo_latched) {
+            return K10_STATE_EVENT_NONE;
+        }
+
+        if ((now - g_restart_combo_start_ms) >= kRestartHoldMs &&
+            (now - g_last_restart_ms) >= kRestartCooldownMs) {
+            g_restart_combo_latched = true;
+            g_last_restart_ms = now;
             return K10_STATE_EVENT_RESTART_REQUESTED;
         }
         return K10_STATE_EVENT_NONE;

@@ -167,7 +167,7 @@ extern const unsigned char *current_rom_base;
 #ifdef ENABLE_GALAGA
 extern unsigned char starcontrol;
 #endif
-#if defined(ENABLE_GALAGA) || defined(ENABLE_PACMAN) || defined(ENABLE_DIGDUG)
+#if defined(ENABLE_GALAGA) || defined(ENABLE_PACMAN) || defined(ENABLE_DIGDUG) || defined(ENABLE_FROGGER) || defined(ENABLE_1942)
 extern unsigned char soundregs[32];
 #endif
 #ifndef SINGLE_MACHINE
@@ -223,6 +223,7 @@ extern const unsigned char digdug_rom_cpu3[];
 #endif
 #ifdef ENABLE_1942
 extern unsigned char _1942_bank;
+extern unsigned char _1942_sound_latch;
 extern const unsigned char _1942_rom_cpu1[];
 extern const unsigned char _1942_rom_cpu2[];
 extern const unsigned char _1942_rom_cpu1_b0[];
@@ -232,15 +233,42 @@ extern const unsigned char _1942_rom_cpu1_b2[];
 
 #define NONE  ((const unsigned char *)0l)
 
+#ifndef IO_EMULATION
+#ifdef ENABLE_1942
+static inline byte OpZ80_1942_INL(register word Addr) {
+  static const unsigned char *_1942_bank_table[] = {
+    _1942_rom_cpu1_b0, _1942_rom_cpu1_b1, _1942_rom_cpu1_b2
+  };
+
+  if(current_cpu == 0) {
+    if(Addr < 0x8000) return _1942_rom_cpu1[Addr];
+    if((Addr & 0xc000) == 0x8000) {
+      if(_1942_bank == 0) return _1942_bank_table[0][Addr - 0x8000];
+      if((_1942_bank == 1) && (Addr < 0xb000)) return _1942_bank_table[1][Addr - 0x8000];
+      if(_1942_bank == 2) return _1942_bank_table[2][Addr - 0x8000];
+    }
+
+    if((Addr & 0xf000) == 0xe000) return memory[Addr - 0xe000];
+    if((Addr & 0xff80) == 0xcc00) return memory[Addr - 0xcc00 + 0x2400];
+    if((Addr & 0xf800) == 0xd000) return memory[Addr - 0xd000 + 0x1000];
+    if((Addr & 0xfc00) == 0xd800) return memory[Addr - 0xd800 + 0x2000];
+  } else {
+    if(Addr < 0x4000) return _1942_rom_cpu2[Addr];
+    if((Addr & 0xf800) == 0x4000) return memory[Addr - 0x4000 + 0x1800];
+    if(Addr == 0x6000) return _1942_sound_latch;
+  }
+
+  return current_rom_base[Addr];
+}
+#endif
+
 static inline byte OpZ80_INL(register word Addr) {
 #ifdef ENABLE_1942
-  static const unsigned char *_1942_bank_table[] = {
-    _1942_rom_cpu1_b0, _1942_rom_cpu1_b1, _1942_rom_cpu1_b2 }; 
-  if(MACHINE_IS_1942 && (Addr & 0x8000))
-    return _1942_bank_table[_1942_bank][Addr-0x8000];
+  if(MACHINE_IS_1942) return OpZ80_1942_INL(Addr);
 #endif
   
   return current_rom_base[Addr];
 }
+#endif // IO_EMULATION
 
 #endif // _EMULATION_H_

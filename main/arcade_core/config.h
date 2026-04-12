@@ -4,12 +4,12 @@
 #include "k10_config.h"
 
 // disable e.g. if roms are missing
-#define ENABLE_PACMAN
-#define ENABLE_GALAGA
-#define ENABLE_DKONG
-#define ENABLE_FROGGER
+// #define ENABLE_PACMAN
+// #define ENABLE_GALAGA
+// #define ENABLE_DKONG
+// #define ENABLE_FROGGER
 #define ENABLE_DIGDUG
-#define ENABLE_1942
+// #define ENABLE_1942
 
 #if !defined(ENABLE_PACMAN) && !defined(ENABLE_GALAGA) && !defined(ENABLE_DKONG) && !defined(ENABLE_FROGGER) && !defined(ENABLE_DIGDUG) && !defined(ENABLE_1942)
 #error "At least one machine has to be enabled!"

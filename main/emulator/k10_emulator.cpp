@@ -13,19 +13,10 @@
 
 extern "C" {
 #include "arcade_core/config.h"
+#define IO_EMULATION
+#include "arcade_core/emulation.h"
 
 struct Z80;
-
-void prepare_emulation(void);
-void emulate_frame(void);
-extern unsigned char* memory;
-extern char game_started;
-extern unsigned char soundregs[32];
-extern unsigned char starcontrol;
-extern signed char machine;
-#ifdef ENABLE_DKONG
-extern unsigned char colortable_select;
-#endif
 }
 
 struct sprite_S {
@@ -45,9 +36,10 @@ unsigned char active_sprites = 0;
 struct sprite_S* sprite = nullptr;
 unsigned short* frame_buffer = nullptr;
 
-#define IO_EMULATION
 #include "arcade_core/tileaddr.h"
+#ifdef ENABLE_GALAGA
 #include "arcade_core/games/galaga/galaga.h"
+#endif
 #ifdef ENABLE_PACMAN
 #include "arcade_core/games/pacman/pacman.h"
 #endif
@@ -60,6 +52,9 @@ unsigned short* frame_buffer = nullptr;
 #ifdef ENABLE_FROGGER
 #include "arcade_core/games/frogger/frogger.h"
 #endif
+#ifdef ENABLE_DIGDUG
+#include "arcade_core/games/digdug/digdug.h"
+#endif
 
 namespace {
 
@@ -69,6 +64,7 @@ constexpr uint64_t kFramePeriodUs = 16667;
 constexpr uint32_t kEmulationTaskStackWords = 4096;
 constexpr UBaseType_t kEmulationTaskPriority = 2;
 constexpr BaseType_t kEmulationTaskCore = 0;
+constexpr bool kEnableRuntimeProfiling = true;
 
 TaskHandle_t g_emulation_task = nullptr;
 TaskHandle_t g_present_task = nullptr;
@@ -102,6 +98,13 @@ int16_t clamp_pcm16(int sample) {
     return static_cast<int16_t>(sample);
 }
 
+template <typename RenderRowFn>
+inline void render_two_rows(RenderRowFn render_fn, short row0, short row1) {
+    render_fn(row0);
+    frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
+    render_fn(row1);
+}
+
 void render_line(short strip_row) {
     memset(frame_buffer, 0, kFrameBytes);
     unsigned short* const original_buffer = frame_buffer;
@@ -110,38 +113,35 @@ void render_line(short strip_row) {
     const short row1 = strip_row * 2 + 1;
 
 #ifdef ENABLE_PACMAN
-    if (machine == K10_MACHINE_PACMAN) {
-        pacman_render_row(row0);
-        frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
-        pacman_render_row(row1);
-    } else
+PACMAN_BEGIN
+    render_two_rows(pacman_render_row, row0, row1);
+PACMAN_END
 #endif
-#ifdef ENABLE_1942
-    if (machine == K10_MACHINE_1942) {
-        _1942_render_row(row0);
-        frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
-        _1942_render_row(row1);
-    } else
-#endif
-#ifdef ENABLE_FROGGER
-    if (machine == K10_MACHINE_FROGGER) {
-        frogger_render_row(row0);
-        frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
-        frogger_render_row(row1);
-    } else
+#ifdef ENABLE_GALAGA
+GALAGA_BEGIN
+    render_two_rows(galaga_render_row, row0, row1);
+GALAGA_END
 #endif
 #ifdef ENABLE_DKONG
-    if (machine == K10_MACHINE_DKONG) {
-        dkong_render_row(row0);
-        frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
-        dkong_render_row(row1);
-    } else
+DKONG_BEGIN
+    render_two_rows(dkong_render_row, row0, row1);
+DKONG_END
 #endif
-    {
-        galaga_render_row(row0);
-        frame_buffer += K10_TFT_ACTIVE_WIDTH * 8;
-        galaga_render_row(row1);
-    }
+#ifdef ENABLE_FROGGER
+FROGGER_BEGIN
+    render_two_rows(frogger_render_row, row0, row1);
+FROGGER_END
+#endif
+#ifdef ENABLE_DIGDUG
+DIGDUG_BEGIN
+    render_two_rows(digdug_render_row, row0, row1);
+DIGDUG_END
+#endif
+#ifdef ENABLE_1942
+_1942_BEGIN
+    render_two_rows(_1942_render_row, row0, row1);
+_1942_END
+#endif
 
     frame_buffer = original_buffer;
 }
@@ -181,12 +181,28 @@ void audio_pacman_waveregs_parse() {
 }
 #endif
 
+#ifdef ENABLE_DIGDUG
+void audio_digdug_waveregs_parse() {
+    for (int ch = 0; ch < 3; ++ch) {
+        snd_volume[ch] = soundregs[ch * 5 + 0x15];
+        if (!snd_volume[ch]) continue;
+
+        snd_freq[ch]  = (ch == 0) ? soundregs[0x10] : 0;
+        snd_freq[ch] += soundregs[ch * 5 + 0x11] << 4;
+        snd_freq[ch] += soundregs[ch * 5 + 0x12] << 8;
+        snd_freq[ch] += soundregs[ch * 5 + 0x13] << 12;
+        snd_freq[ch] += soundregs[ch * 5 + 0x14] << 16;
+        snd_wave[ch]  = digdug_wavetable[soundregs[ch * 5 + 0x05] & 0x0f];
+    }
+}
+#endif
+
 void audio_namco_waveregs_parse_cpp() {
 #ifdef ENABLE_PACMAN
-    if (machine == K10_MACHINE_PACMAN) { audio_pacman_waveregs_parse(); return; }
+    if (MACHINE_IS_PACMAN) { audio_pacman_waveregs_parse(); return; }
 #endif
 #ifdef ENABLE_1942
-    if (machine == K10_MACHINE_1942) {
+    if (MACHINE_IS_1942) {
         for (int ay = 0; ay < 2; ++ay) {
             const int ay_off = 16 * ay;
             for (int c = 0; c < 3; ++c) {
@@ -199,8 +215,11 @@ void audio_namco_waveregs_parse_cpp() {
         return;
     }
 #endif
+#ifdef ENABLE_DIGDUG
+    if (MACHINE_IS_DIGDUG) { audio_digdug_waveregs_parse(); return; }
+#endif
 #ifdef ENABLE_GALAGA
-    audio_galaga_waveregs_parse();
+    if (MACHINE_IS_GALAGA) { audio_galaga_waveregs_parse(); }
 #endif
 }
 
@@ -208,7 +227,7 @@ void snd_render_buffer_cpp() {
     const int32_t vol_scale = (64 * AUDIO_VOLUME) / 100;
 
 #ifdef ENABLE_1942
-    if (machine == K10_MACHINE_1942) {
+    if (MACHINE_IS_1942) {
         constexpr int AY_INC = 8;
         constexpr int AY_VOL = 4;
         for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
@@ -290,8 +309,6 @@ void update_screen_cpp() {
     static uint32_t frame_count = 0;
     static uint32_t last_fps_time = 0;
     static uint64_t next_frame_deadline_us = 0;
-
-    const uint32_t frame_start = static_cast<uint32_t>(k10_micros());
     frame_count++;
 
     if (g_emulation_task != nullptr) {
@@ -299,36 +316,43 @@ void update_screen_cpp() {
     }
 
     const uint32_t now = k10_millis();
-    if (now - last_fps_time >= 5000) {
+    if (kEnableRuntimeProfiling && now - last_fps_time >= 5000) {
         const float fps = last_fps_time == 0 ? 0.0f : (frame_count * 1000.0f) / (now - last_fps_time);
         printf("FPS: %.2f, Free Heap: %u\n", fps, esp_get_free_heap_size());
         frame_count = 0;
         last_fps_time = now;
     }
 
-#ifdef ENABLE_FROGGER
-    if (machine == K10_MACHINE_FROGGER) {
-        frogger_prepare_frame();
-    } else
-#endif
 #ifdef ENABLE_PACMAN
-    if (machine == K10_MACHINE_PACMAN) {
-        pacman_prepare_frame();
-    } else
+PACMAN_BEGIN
+    pacman_prepare_frame();
+PACMAN_END
 #endif
-#ifdef ENABLE_1942
-    if (machine == K10_MACHINE_1942) {
-        _1942_prepare_frame();
-    } else
+#ifdef ENABLE_GALAGA
+GALAGA_BEGIN
+    galaga_prepare_frame();
+GALAGA_END
 #endif
 #ifdef ENABLE_DKONG
-    if (machine == K10_MACHINE_DKONG) {
-        dkong_prepare_frame();
-    } else
+DKONG_BEGIN
+    dkong_prepare_frame();
+DKONG_END
 #endif
-    {
-        galaga_prepare_frame();
-    }
+#ifdef ENABLE_FROGGER
+FROGGER_BEGIN
+    frogger_prepare_frame();
+FROGGER_END
+#endif
+#ifdef ENABLE_DIGDUG
+DIGDUG_BEGIN
+    digdug_prepare_frame();
+DIGDUG_END
+#endif
+#ifdef ENABLE_1942
+_1942_BEGIN
+    _1942_prepare_frame();
+_1942_END
+#endif
 
     k10_video_begin_frame();
     for (int strip_row = 0; strip_row < K10_TFT_STRIP_COUNT; ++strip_row) {
@@ -365,9 +389,9 @@ void update_screen_cpp() {
     }
 
 #ifdef ENABLE_GALAGA
-    if (machine == K10_MACHINE_GALAGA) {
-        stars_scroll_y += 2 * star_speeds[starcontrol & 7];
-    }
+GALAGA_BEGIN
+    stars_scroll_y += 2 * star_speeds[starcontrol & 7];
+GALAGA_END
 #endif
 }
 
@@ -437,12 +461,14 @@ void teardown_emulation_task() {
 
 }  // namespace
 
+#ifdef ENABLE_GALAGA
 extern "C" void galaga_trigger_sound_explosion(void) {
     if (game_started) {
         snd_boom_cnt = 2 * sizeof(galaga_sample_boom);
         snd_boom_ptr = reinterpret_cast<const signed char*>(galaga_sample_boom);
     }
 }
+#endif
 
 #ifdef ENABLE_DKONG
 extern "C" void dkong_trigger_sound(char /*sound_index*/) {
@@ -507,7 +533,9 @@ bool k10_emulator_start(K10Machine machine) {
     ulTaskNotifyTake(pdTRUE, 0);
 
     prepare_emulation();
+#ifndef SINGLE_MACHINE
     ::machine = (signed char)machine;
+#endif
 
     const BaseType_t task_ok = xTaskCreatePinnedToCore(emulation_task, "emulation task", kEmulationTaskStackWords,
                                                        nullptr, kEmulationTaskPriority, &g_emulation_task,

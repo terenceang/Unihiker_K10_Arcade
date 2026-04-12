@@ -46,6 +46,16 @@ void prepare_emulation(void) {
   current_cpu = 0;
 #ifdef ENABLE_GALAGA
   current_rom_base = galaga_rom_cpu1;
+#elif defined(ENABLE_PACMAN)
+  current_rom_base = pacman_rom;
+#elif defined(ENABLE_DIGDUG)
+  current_rom_base = digdug_rom_cpu1;
+#elif defined(ENABLE_FROGGER)
+  current_rom_base = frogger_rom_cpu1;
+#elif defined(ENABLE_DKONG)
+  current_rom_base = dkong_rom_cpu1;
+#elif defined(ENABLE_1942)
+  current_rom_base = _1942_rom_cpu1;
 #else
   current_rom_base = NULL;
 #endif
