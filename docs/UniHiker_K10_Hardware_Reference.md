@@ -4,6 +4,8 @@
 
 ---
 
+> This document is a board-level hardware reference for the UniHiker K10 platform. It describes the K10's electrical interfaces, peripherals, and signal flow in a way that is useful for any firmware or project targeting the board.
+
 ## 1. System Overview
 
 The UniHiker K10 (DFR0992) is a high-performance AI and IoT development platform centred on the ESP32-S3-WROOM-1 module. It integrates display, camera, audio, RGB LEDs, buttons, and a Micro:bit-compatible edge connector via GPIO expansion. The board uses a **Hub-and-Spoke architecture**: the ESP32-S3 handles high-speed tasks (Display, Camera, Audio), while the XL9535 I/O Expander manages low-speed user interactions and auxiliary power control, offloading GPIO requirements from the main MCU.
@@ -91,7 +93,8 @@ Used by: IO Expander (XL9535), Audio Codec (ES7243), I2C Sensors, and External H
 | LCD_CS | GPIO14 |
 | LCD_DC | GPIO13 |
 | LCD_RST | Not driven by a dedicated GPIO in the Arduino board package (`TFT_RST = -1`) |
-| LCD_BLK | Backlight control via XL9535 P00 |
+| LCD_EN | GPIO40 (`K10_TFT_ENABLE`) |
+| LCD_BLK | Backlight control via XL9535 P00 (expander output, not a direct ESP32 GPIO) |
 
 ### 3.3 I2S Bus (Audio)
 
@@ -116,12 +119,15 @@ The ILI9341 is a SPI TFT controller driven directly by ESP32-S3 GPIOs for low-la
 | CS | LCD_CS (GPIO14) |
 | DC | LCD_DC (GPIO13) |
 | RST | LCD_RST (not mapped to a dedicated Arduino GPIO in the installed `unihiker_k10` board package) |
+| EN | LCD_EN (GPIO40) |
 | LED+ | Backlight (via MMBT3904 transistor) |
 | LED− | GND |
 
-> **Backlight signal path:** ESP32-S3 → XL9535 (P00, I2C) → MMBT3904 base → LCD LED+
+> **Backlight signal path:** ESP32-S3 writes I2C commands to the XL9535, and XL9535 P00 drives the MMBT3904 base to switch LCD LED+ on. This is an expander-controlled signal, not a direct ESP32 GPIO.
 >
-> **Board support note:** The installed `unihiker_k10` Arduino variant defines `SDA=47`, `SCL=48`, `MOSI=21`, and `SCK=12`. The working LCD configuration validated in firmware uses `CS=14`, `DC=13`, and `RST=-1`.
+> **Panel enable:** ESP32 GPIO40 is used as `K10_TFT_ENABLE` to bring the display panel out of reset/powerdown.
+>
+> **Board support note:** The installed `unihiker_k10` Arduino variant defines `SDA=47`, `SCL=48`, `MOSI=21`, and `SCK=12`. The working LCD configuration validated on the UniHiker K10 board uses `CS=14`, `DC=13`, `EN=40`, and `RST=-1`.
 
 ---
 
@@ -274,6 +280,30 @@ WS2812-type daisy-chain LEDs (RGB1, RGB2, RGB3 + one spare). All driven from the
 
 ## 11. External Headers
 
+### 11.a SPI PSRAM / External RAM
+The UniHiker K10 supports ESP32-S3 external SPI PSRAM. On this board, PSRAM is typically configured for octal SPI mode and can be used by the ESP-IDF heap allocator.
+
+Example SDKCONFIG settings for a UniHiker K10 project include:
+
+- `CONFIG_SPIRAM=y`
+- `CONFIG_SPIRAM_MODE_OCT=y`
+- `CONFIG_SPIRAM_TYPE_AUTO=y`
+- `CONFIG_SPIRAM_CLK_IO=30`
+- `CONFIG_SPIRAM_CS_IO=26`
+- `CONFIG_SPIRAM_SPEED_80M=y`
+- `CONFIG_SPIRAM_BOOT_INIT=y`
+- `CONFIG_SPIRAM_USE_MALLOC=y`
+- `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384`
+- `CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768`
+- `CONFIG_SOC_PSRAM_DMA_CAPABLE=y`
+- `CONFIG_SOC_AHB_GDMA_SUPPORT_PSRAM=y`
+- `CONFIG_SOC_SPIRAM_SUPPORTED=y`
+- `CONFIG_SOC_SPIRAM_XIP_SUPPORTED=y`
+- `CONFIG_SOC_MEMSPI_CORE_CLK_SHARED_WITH_PSRAM=y`
+- `CONFIG_ESP_SLEEP_PSRAM_LEAKAGE_WORKAROUND=y`
+
+PSRAM uses the default flash interface pins for the ESP32-S3 SPI RAM controller, with clock on GPIO30 and CS on GPIO26.
+
 ### 11.1 I2C Header (J2)
 
 | Pin | Signal |
@@ -366,7 +396,7 @@ A dedicated SPI font ROM chip shares the SPI3 bus (`CS3#`, `MOSI3`, `SCLK3`, `MI
 
 ## 15. Shared Pin Constraints
 
-Because the ESP32-S3 has a finite number of GPIOs, several signal paths are shared. These constraints must be observed in firmware:
+Because the ESP32-S3 has a finite number of GPIOs, several signal paths are shared. These constraints must be observed in any supporting software:
 
 | Shared Resource | Functions | Constraint |
 |---|---|---|

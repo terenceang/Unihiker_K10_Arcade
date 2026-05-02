@@ -37,9 +37,9 @@ The XL9535 typically has several registers that control its behavior. Based on t
 **Backlight Brightness:** The backlight, controlled by XL9535 P00, is for ON/OFF switching only. Based on the hardware reference, there is no PWM control for variable brightness; it is fixed at full intensity when ON.
 
 **Button Mappings on K10 Basic:**
-*   **Key B (Button B):** Mapped to **XL9535 P02** (Port 0, Bit 2).
-*   **Key A (Button A):** Mapped to **XL9535 P14** (Port 1, Bit 4).
-*   **UserLed:** Mapped to **XL9535 P17** (Port 1, Bit 7).
+*   **Key B (Button B):** Mapped to **XL9535 P02**.
+*   **Key A (Button A):** Mapped to **XL9535 P14**.
+*   **UserLed:** Mapped to **XL9535 P17**.
 
 ### Basic I2C Communication with `Wire.h`
 
@@ -129,7 +129,7 @@ void loop() {
   byte currentPort0State = readXL9535Register(XL9535_REG_INPUT_PORT_0);
   byte currentPort1State = readXL535Register(XL9535_REG_INPUT_PORT_1);
 
-  // --- Check Key B (Port 0, Bit 2) ---
+  // --- Check Key B (P02) ---
   // Buttons are typically active LOW, meaning the bit goes LOW when pressed.
   if (!(currentPort0State & KEY_B_BIT) && (lastPort0State & KEY_B_BIT)) {
     Serial.println("[EVENT] Key B (Button B) Pressed!");
@@ -150,7 +150,7 @@ void loop() {
     Serial.println(ledState ? "ON" : "OFF");
   }
 
-  // --- Check Key A (Port 1, Bit 4) ---
+  // --- Check Key A (P14) ---
   if (!(currentPort1State & KEY_A_BIT) && (lastPort1State & KEY_A_BIT)) {
     Serial.println("[EVENT] Key A (Button A) Pressed!");
     // You can add other actions here for Button A

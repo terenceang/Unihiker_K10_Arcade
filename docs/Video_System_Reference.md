@@ -18,7 +18,7 @@ The Unihiker K10 uses an **ILI9341 TFT display** connected via a high-speed SPI 
 - **SCLK:** GPIO 12
 - **CS:** GPIO 14
 - **DC:** GPIO 13
-- **Backlight:** Managed via the **XL9535 IO Expander** (Port 0, Bit 0).
+- **Backlight:** Managed via the **XL9535 IO Expander** at **P00**.
 
 ## 2. Rendering Pipeline
 

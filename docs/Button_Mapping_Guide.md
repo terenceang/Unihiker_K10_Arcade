@@ -14,8 +14,8 @@ The emulator supports multiple input sources:
 
 The Unihiker K10 (DFR0992) features three primary physical buttons:
 
-1.  **Key A (K3)**: Connected to the XL9535 IO Expander (Port 1, Bit 4).
-2.  **Key B (K4)**: Connected to the XL9535 IO Expander (Port 0, Bit 2).
+1.  **Key A (K3)**: Connected to the XL9535 IO Expander at **P14**.
+2.  **Key B (K4)**: Connected to the XL9535 IO Expander at **P02**.
 3.  **BOOT (K1)**: Connected directly to ESP32-S3 GPIO 0.
 
 ## Virtual Button Mapping
