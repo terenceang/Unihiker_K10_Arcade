@@ -10,6 +10,7 @@
 #include "k10_hardware.h"
 #include "k10_idf.h"
 #include "k10_video.h"
+#include "esp_dsp.h"
 
 extern "C" {
 #include "arcade_core/config.h"
@@ -37,6 +38,8 @@ void leds_check_galaga_sprite(struct sprite_S* spr) {
 unsigned char active_sprites = 0;
 struct sprite_S* sprite = nullptr;
 unsigned short* frame_buffer = nullptr;
+
+static float dsp_mix_buffer[K10_AUDIO_BUFFER_FRAMES];
 
 #include "arcade_core/tileaddr.h"
 #ifdef ENABLE_GALAGA
@@ -249,34 +252,31 @@ void audio_namco_waveregs_parse_cpp() {
 }
 
 IRAM_ATTR void snd_render_buffer_cpp() {
-    const int32_t vol_scale = (64 * AUDIO_VOLUME) / 100;
+    const float master_vol = static_cast<float>(AUDIO_VOLUME) / 100.0f;
+    float current_final_scale = 1.0f;
 
 #ifdef ENABLE_DKONG
     if (MACHINE_IS_DKONG) {
-        constexpr int32_t kDkongPcmScale = 256;
+        constexpr float kDkongPcmScale = 256.0f;
         const bool has_queue_data = dkong_audio_rptr != dkong_audio_wptr;
         for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
-            int32_t value = 0;
+            float value = 0.0f;
 
             if (has_queue_data) {
                 // DK audio CPU emits 64-byte chunks. Mirror the legacy path by
                 // duplicating each byte to fill the current audio frame size.
                 const int source_index = (index >> 1) & 0x3f;
                 const int raw = dkong_audio_transfer_buffer[dkong_audio_rptr][source_index];
-                value = (raw - 128) * kDkongPcmScale;
+                value = static_cast<float>(raw - 128) * kDkongPcmScale;
             }
-
-            value = (value * AUDIO_VOLUME) / 100;
-            const int16_t sample = clamp_pcm16(value);
-            snd_buffer[2 * index] = sample;
-            snd_buffer[2 * index + 1] = sample;
+            dsp_mix_buffer[index] = value;
         }
 
         if (has_queue_data) {
             dkong_audio_rptr = (dkong_audio_rptr + 1) & DKONG_AUDIO_QUEUE_MASK;
         }
-        return;
-    }
+        current_final_scale = master_vol;
+    } else
 #endif
 
 #if defined(ENABLE_FROGGER) || defined(ENABLE_1942)
@@ -298,13 +298,13 @@ IRAM_ATTR void snd_render_buffer_cpp() {
             MACHINE_IS_FROGGER ? 9 :
     #endif
             8;
-        const int AY_VOL =
+        const float AY_VOL_F =
     #ifdef ENABLE_FROGGER
-            MACHINE_IS_FROGGER ? 11 :
+            MACHINE_IS_FROGGER ? 11.0f :
     #endif
-            10;
+            10.0f;
         for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
-            int32_t value = 0;
+            float value = 0.0f;
             for (int ay = 0; ay < ay_chip_count; ++ay) {
                 if (ay_period[ay][3]) {
                     audio_cnt[ay][3] += AY_INC;
@@ -318,9 +318,9 @@ IRAM_ATTR void snd_render_buffer_cpp() {
                     if (ay_period[ay][c] && ay_volume[ay][c] && ay_enable[ay][c]) {
                         int bit = 1;
                         if (ay_enable[ay][c] & 1) bit &= (audio_toggle[ay][c] > 0) ? 1 : 0;
-                        if (ay_enable[ay][c] & 2) bit &= (int)(ay_noise_rng[ay] & 1);
+                        if (ay_enable[ay][c] & 2) bit &= static_cast<int>(ay_noise_rng[ay] & 1);
                         if (bit == 0) bit = -1;
-                        value += AY_VOL * bit * ay_volume[ay][c];
+                        value += AY_VOL_F * static_cast<float>(bit) * static_cast<float>(ay_volume[ay][c]);
                         audio_cnt[ay][c] += AY_INC;
                         if (audio_cnt[ay][c] > ay_period[ay][c]) {
                             audio_cnt[ay][c] -= ay_period[ay][c];
@@ -329,37 +329,42 @@ IRAM_ATTR void snd_render_buffer_cpp() {
                     }
                 }
             }
-            value *= vol_scale;
-            const int16_t sample = clamp_pcm16(value);
-            snd_buffer[2 * index] = sample;
-            snd_buffer[2 * index + 1] = sample;
+            dsp_mix_buffer[index] = value;
         }
-        return;
-    }
+        current_final_scale = 64.0f * master_vol;
+    } else
 #endif
+    {
+        for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
+            float value = 0.0f;
 
-    for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
-        int32_t value = 0;
+            if (snd_volume[0]) value += static_cast<float>(snd_volume[0]) * static_cast<float>(snd_wave[0][(snd_cnt[0] >> 13) & 0x1f]);
+            if (snd_volume[1]) value += static_cast<float>(snd_volume[1]) * static_cast<float>(snd_wave[1][(snd_cnt[1] >> 13) & 0x1f]);
+            if (snd_volume[2]) value += static_cast<float>(snd_volume[2]) * static_cast<float>(snd_wave[2][(snd_cnt[2] >> 13) & 0x1f]);
 
-        if (snd_volume[0]) value += snd_volume[0] * snd_wave[0][(snd_cnt[0] >> 13) & 0x1f];
-        if (snd_volume[1]) value += snd_volume[1] * snd_wave[1][(snd_cnt[1] >> 13) & 0x1f];
-        if (snd_volume[2]) value += snd_volume[2] * snd_wave[2][(snd_cnt[2] >> 13) & 0x1f];
+            if (snd_boom_cnt) {
+                value += static_cast<float>(*snd_boom_ptr);
+                if (snd_boom_cnt & 1) snd_boom_ptr++;
+                snd_boom_cnt--;
+            }
 
-        if (snd_boom_cnt) {
-            value += *snd_boom_ptr;
-            if (snd_boom_cnt & 1) snd_boom_ptr++;
-            snd_boom_cnt--;
+            dsp_mix_buffer[index] = value;
+
+            snd_cnt[0] += snd_freq[0];
+            snd_cnt[1] += snd_freq[1];
+            snd_cnt[2] += snd_freq[2];
         }
+        current_final_scale = 64.0f * master_vol;
+    }
 
-        value *= vol_scale;
+    // Apply master volume scaling via esp-dsp vector operation
+    dsps_mulc_f32(dsp_mix_buffer, dsp_mix_buffer, K10_AUDIO_BUFFER_FRAMES, current_final_scale, 1, 1);
 
-        const int16_t sample = clamp_pcm16(value);
+    // Final conversion to 16-bit PCM and interleaving for stereo output
+    for (int index = 0; index < K10_AUDIO_BUFFER_FRAMES; ++index) {
+        const int16_t sample = clamp_pcm16(static_cast<int>(dsp_mix_buffer[index]));
         snd_buffer[2 * index] = sample;
         snd_buffer[2 * index + 1] = sample;
-
-        snd_cnt[0] += snd_freq[0];
-        snd_cnt[1] += snd_freq[1];
-        snd_cnt[2] += snd_freq[2];
     }
 }
 
